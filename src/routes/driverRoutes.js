@@ -166,4 +166,51 @@ router.post("/register", upload, async (req, res) => {
   }
 });
 
+// 5. Get Driver Profile
+router.get("/profile/:phone", async (req, res) => {
+  const { phone } = req.params;
+  
+  try {
+    const params = {
+      TableName: process.env.DYNAMODB_TABLE_DRIVERS,
+      Key: {
+        driverId: { S: phone }
+      }
+    };
+    
+    const { Item } = await dynamoClient.send(new GetItemCommand(params));
+    
+    if (!Item) {
+      return res.status(404).json({ error: "Driver not found" });
+    }
+    
+    // Flatten the DynamoDB item
+    const profile = {
+      name: Item.name?.S,
+      phone: Item.phone?.S,
+      aadhar: Item.aadhar?.S,
+      dob: Item.dob?.S,
+      state: Item.state?.S,
+      licenceNumber: Item.licenceNumber?.S,
+      licenceExpiry: Item.licenceExpiry?.S,
+      vehicleNumber: Item.vehicleNumber?.S,
+      vehicleType: Item.vehicleType?.S,
+      status: Item.status?.S,
+      profilePhoto: Item.profilePhoto?.S,
+      aadhaarFront: Item.aadhaarFront?.S,
+      dlFront: Item.dlFront?.S,
+      dlBack: Item.dlBack?.S,
+      rcFront: Item.rcFront?.S,
+      insuranceFront: Item.insuranceFront?.S,
+      fcFront: Item.fcFront?.S,
+      permitFront: Item.permitFront?.S,
+      createdAt: Item.createdAt?.S
+    };
+    
+    res.json(profile);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

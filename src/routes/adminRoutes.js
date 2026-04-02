@@ -37,6 +37,13 @@ router.get("/pending-drivers", async (req, res) => {
       vehicleType: item.vehicleType?.S,
       status: item.status?.S,
       profilePhoto: item.profilePhoto?.S,
+      aadhaarFront: item.aadhaarFront?.S,
+      dlFront: item.dlFront?.S,
+      dlBack: item.dlBack?.S,
+      rcFront: item.rcFront?.S,
+      insuranceFront: item.insuranceFront?.S,
+      fcFront: item.fcFront?.S,
+      permitFront: item.permitFront?.S,
       createdAt: item.createdAt?.S
     }));
     
