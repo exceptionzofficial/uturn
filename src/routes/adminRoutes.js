@@ -79,4 +79,63 @@ router.post("/update-status", async (req, res) => {
   }
 });
 
+// 3. Get All Trips (System Wide)
+router.get("/all-trips", async (req, res) => {
+  try {
+    const params = {
+      TableName: process.env.DYNAMODB_TABLE_TRIPS
+    };
+    
+    const { Items } = await dynamoClient.send(new ScanCommand(params));
+    
+    const trips = Items.map(item => {
+      const trip = {};
+      for (const key in item) {
+        if (item[key].S) trip[key] = item[key].S;
+        else if (item[key].N) trip[key] = item[key].N;
+        else if (item[key].M) {
+          trip[key] = {};
+          for (const mKey in item[key].M) {
+            trip[key][mKey] = item[key].M[mKey].N || item[key].M[mKey].S;
+          }
+        }
+      }
+      return trip;
+    });
+    
+    res.json(trips);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 4. Get System Stats
+router.get("/stats", async (req, res) => {
+  try {
+    // For a small scale, we can Scan. For large scale, use GSI or metadata tables.
+    const driverParams = { TableName: process.env.DYNAMODB_TABLE_DRIVERS };
+    const tripParams = { TableName: process.env.DYNAMODB_TABLE_TRIPS };
+    
+    const [driversData, tripsData] = await Promise.all([
+      dynamoClient.send(new ScanCommand(driverParams)),
+      dynamoClient.send(new ScanCommand(tripParams))
+    ]);
+    
+    const totalDrivers = driversData.Items.length;
+    const pendingDrivers = driversData.Items.filter(i => i.status?.S === "PENDING_REVIEW").length;
+    const totalTrips = tripsData.Items.length;
+    const pendingTrips = tripsData.Items.filter(i => i.status?.S === "PENDING").length;
+    
+    res.json({
+      totalDrivers,
+      pendingDrivers,
+      totalTrips,
+      pendingTrips,
+      activeTrips: tripsData.Items.filter(i => i.status?.S === "ACCEPTED").length
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

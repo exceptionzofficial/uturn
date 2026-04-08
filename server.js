@@ -8,6 +8,7 @@ const PORT = process.env.PORT || 3000;
 
 const driverRoutes = require("./src/routes/driverRoutes");
 const adminRoutes = require("./src/routes/adminRoutes");
+const vendorRoutes = require("./src/routes/vendorRoutes");
 
 app.use(cors());
 app.use(express.json());
@@ -21,6 +22,7 @@ app.use((req, res, next) => {
 // Routes
 app.use("/api/driver", driverRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/vendor", vendorRoutes);
 
 // Basic Health Check
 app.get("/", (req, res) => {
