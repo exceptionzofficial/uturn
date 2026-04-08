@@ -12,6 +12,12 @@ const adminRoutes = require("./src/routes/adminRoutes");
 app.use(cors());
 app.use(express.json());
 
+// Logger
+app.use((req, res, next) => {
+  console.log(`[${new Date().toLocaleTimeString()}] ${req.method} ${req.url}`);
+  next();
+});
+
 // Routes
 app.use("/api/driver", driverRoutes);
 app.use("/api/admin", adminRoutes);
