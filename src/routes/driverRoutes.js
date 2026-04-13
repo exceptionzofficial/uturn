@@ -129,10 +129,10 @@ router.post("/check-aadhar", async (req, res) => {
 
 // 4. Register Driver
 router.post("/register", upload, async (req, res) => {
-  const driverData = JSON.parse(req.body.driverData);
-  const files = req.files;
-
   try {
+    const driverData = JSON.parse(req.body.driverData);
+    const files = req.files;
+
     const params = {
       TableName: process.env.DYNAMODB_TABLE_DRIVERS,
       Item: {

@@ -9,6 +9,76 @@ const {
 const { dynamoClient } = require("../config/awsConfig");
 require("dotenv").config();
 
+// Temporary in-memory OTP storage
+const otps = {};
+
+// 0. Check Vendor Status
+router.post("/check-status", async (req, res) => {
+  const { phone } = req.body;
+  
+  try {
+    const params = {
+      TableName: process.env.DYNAMODB_TABLE_VENDORS,
+      Key: {
+        vendorId: { S: phone }
+      }
+    };
+    
+    const { Item } = await dynamoClient.send(new GetItemCommand(params));
+    
+    if (Item) {
+      res.json({ 
+        exists: true, 
+        status: Item.status?.S || "PENDING_REVIEW",
+        message: Item.status?.S === "PENDING_REVIEW" ? "Your application is under review." : "Existing vendor found."
+      });
+    } else {
+      res.json({ exists: false, status: "NOT_FOUND" });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 0.1 Send OTP
+router.post("/send-otp", async (req, res) => {
+  const { phone, appHash } = req.body;
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  
+  console.log(`[VENDOR OTP] Generated for ${phone}: ${otp}`);
+
+  const message = `<#> Your U-Turn Vendor OTP is ${otp}.\n${appHash || ""}`;
+  
+  try {
+    otps[phone] = otp;
+    const { PublishCommand } = require("@aws-sdk/client-sns");
+    const { snsClient } = require("../config/awsConfig");
+    
+    await snsClient.send(new PublishCommand({
+      Message: message,
+      PhoneNumber: `+91${phone}`
+    }));
+    res.json({ success: true, message: "OTP sent successfully." });
+  } catch (err) {
+    console.error("SNS Error:", err);
+    // Fallback for development if SNS not configured
+    res.json({ success: true, message: "OTP generated (Dev Mode).", devOtp: otp });
+  }
+});
+
+// 0.2 Verify OTP
+router.post("/verify-otp", async (req, res) => {
+  const { phone, otp } = req.body;
+  
+  if (otps[phone] && otps[phone] === otp) {
+    delete otps[phone];
+    res.json({ success: true, message: "OTP verified successfully." });
+  } else {
+    res.status(400).json({ success: false, message: "Invalid OTP." });
+  }
+});
+
+
 // 1. Create a New Trip
 router.post("/create-trip", async (req, res) => {
   const tripData = req.body;
