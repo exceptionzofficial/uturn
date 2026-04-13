@@ -47,7 +47,7 @@ router.post("/send-otp", async (req, res) => {
   
   console.log(`[VENDOR OTP] Generated for ${phone}: ${otp}`);
 
-  const message = `<#> Your U-Turn Vendor OTP is ${otp}.\n${appHash || ""}`;
+  const message = `<#> Your U-Turn Vendor OTP is ${otp}\n${appHash || ""}`;
   
   try {
     otps[phone] = otp;
