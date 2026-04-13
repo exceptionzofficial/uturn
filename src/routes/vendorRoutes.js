@@ -1,16 +1,30 @@
-const express = require("express");
-const router = express.Router();
-const { 
-  PutItemCommand, 
-  ScanCommand, 
-  GetItemCommand,
-  QueryCommand
-} = require("@aws-sdk/client-dynamodb");
-const { dynamoClient } = require("../config/awsConfig");
+const { s3Client, dynamoClient, snsClient } = require("../config/awsConfig");
+const multer = require("multer");
+const multerS3 = require("multer-s3");
 require("dotenv").config();
 
 // Temporary in-memory OTP storage
 const otps = {};
+
+// S3 Upload configuration for Multiple Files
+const upload = multer({
+  storage: multerS3({
+    s3: s3Client,
+    bucket: process.env.S3_BUCKET_NAME,
+    metadata: function (req, file, cb) {
+      cb(null, { fieldName: file.fieldname });
+    },
+    key: function (req, file, cb) {
+      const folder = file.fieldname === 'profilePicture' ? 'profile' : 'docs';
+      const fileName = `vendors/${folder}/${Date.now().toString()}-${file.originalname}`;
+      cb(null, fileName);
+    }
+  })
+}).fields([
+  { name: 'profilePicture', maxCount: 1 },
+  { name: 'aadharImage', maxCount: 1 }
+]);
+
 
 // 0. Check Vendor Status
 router.post("/check-status", async (req, res) => {
@@ -47,7 +61,7 @@ router.post("/send-otp", async (req, res) => {
   
   console.log(`[VENDOR OTP] Generated for ${phone}: ${otp}`);
 
-  const message = `<#> Your U-Turn Vendor OTP is ${otp}\n${appHash || ""}`;
+  const message = `<#> Your U-Turn OTP is ${otp}.\n${appHash || ""}`;
   
   try {
     otps[phone] = otp;
@@ -78,6 +92,37 @@ router.post("/verify-otp", async (req, res) => {
   }
 });
 
+// 0.3 Register Vendor
+router.post("/register", upload, async (req, res) => {
+  try {
+    const vendorData = JSON.parse(req.body.vendorData);
+    const files = req.files;
+
+    const params = {
+      TableName: process.env.DYNAMODB_TABLE_VENDORS || "Vendors",
+      Item: {
+        vendorId: { S: vendorData.phone },
+        name: { S: vendorData.name },
+        dob: { S: vendorData.dob || "" },
+        businessName: { S: vendorData.businessName || "" },
+        gstNumber: { S: vendorData.gstNumber || "" },
+        state: { S: vendorData.state || "" },
+        address: { S: vendorData.address || "" },
+        status: { S: "PENDING_REVIEW" },
+        createdAt: { S: new Date().toISOString() },
+        // File paths from S3
+        aadharImage: { S: files.aadharImage ? files.aadharImage[0].location : "" },
+        profilePicture: { S: files.profilePicture ? files.profilePicture[0].location : "" }
+      }
+    };
+
+    await dynamoClient.send(new PutItemCommand(params));
+    res.json({ success: true, message: "Vendor registered successfully. Awaiting review." });
+  } catch (err) {
+    console.error("Registration Error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // 1. Create a New Trip
 router.post("/create-trip", async (req, res) => {
