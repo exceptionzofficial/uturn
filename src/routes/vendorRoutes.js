@@ -1,3 +1,11 @@
+const express = require("express");
+const router = express.Router();
+const { 
+  PutItemCommand, 
+  ScanCommand, 
+  GetItemCommand,
+  QueryCommand
+} = require("@aws-sdk/client-dynamodb");
 const { s3Client, dynamoClient, snsClient } = require("../config/awsConfig");
 const multer = require("multer");
 const multerS3 = require("multer-s3");
