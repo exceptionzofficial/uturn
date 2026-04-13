@@ -18,7 +18,7 @@ router.post("/check-status", async (req, res) => {
   
   try {
     const params = {
-      TableName: process.env.DYNAMODB_TABLE_VENDORS,
+      TableName: process.env.DYNAMODB_TABLE_VENDORS || "Vendors",
       Key: {
         vendorId: { S: phone }
       }

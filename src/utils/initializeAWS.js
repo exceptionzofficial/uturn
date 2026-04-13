@@ -74,13 +74,15 @@ const INITIALIZE_AWS = async () => {
   ];
 
   for (const table of tables) {
+    const TableName = table.TableName || "Vendors";
     try {
-      await dynamoClient.send(new DescribeTableCommand({ TableName: table.TableName }));
-      console.log(`[DynamoDB] Table "${table.TableName}" already exists.`);
+      await dynamoClient.send(new DescribeTableCommand({ TableName }));
+      console.log(`[DynamoDB] Table "${TableName}" already exists.`);
     } catch (err) {
       if (err.name === "ResourceNotFoundException") {
-        console.log(`[DynamoDB] Creating Table "${table.TableName}"...`);
-        await dynamoClient.send(new CreateTableCommand(table));
+        console.log(`[DynamoDB] Creating Table "${TableName}"...`);
+        await dynamoClient.send(new CreateTableCommand({ ...table, TableName }));
+
         console.log(`[DynamoDB] Table "${table.TableName}" creation initiated.`);
       } else {
         console.error(`[DynamoDB] Error checking/creating table "${table.TableName}":`, err.message);
