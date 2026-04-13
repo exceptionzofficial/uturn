@@ -65,6 +65,12 @@ const INITIALIZE_AWS = async () => {
       ],
       ProvisionedThroughput: { ReadCapacityUnits: 5, WriteCapacityUnits: 5 },
     },
+    {
+      TableName: process.env.DYNAMODB_TABLE_VENDORS,
+      KeySchema: [{ AttributeName: "vendorId", KeyType: "HASH" }],
+      AttributeDefinitions: [{ AttributeName: "vendorId", AttributeType: "S" }],
+      ProvisionedThroughput: { ReadCapacityUnits: 5, WriteCapacityUnits: 5 },
+    },
   ];
 
   for (const table of tables) {
