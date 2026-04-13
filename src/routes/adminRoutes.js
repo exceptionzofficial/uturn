@@ -53,6 +53,42 @@ router.get("/pending-drivers", async (req, res) => {
   }
 });
 
+// 1.1 Get Pending Vendors
+router.get("/pending-vendors", async (req, res) => {
+  try {
+    const params = {
+      TableName: process.env.DYNAMODB_TABLE_VENDORS || "Vendors",
+      FilterExpression: "#s = :p",
+      ExpressionAttributeNames: {
+        "#s": "status"
+      },
+      ExpressionAttributeValues: {
+        ":p": { S: "PENDING_REVIEW" }
+      }
+    };
+    
+    const { Items } = await dynamoClient.send(new ScanCommand(params));
+    
+    const vendors = Items.map(item => ({
+      vendorId: item.vendorId?.S,
+      name: item.name?.S,
+      dob: item.dob?.S,
+      businessName: item.businessName?.S,
+      gstNumber: item.gstNumber?.S,
+      state: item.state?.S,
+      address: item.address?.S,
+      status: item.status?.S,
+      aadharImage: item.aadharImage?.S,
+      profilePicture: item.profilePicture?.S,
+      createdAt: item.createdAt?.S
+    }));
+    
+    res.json(vendors);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // 2. Update Driver Status (Approve/Reject)
 router.post("/update-status", async (req, res) => {
   const { driverId, status } = req.body; // status: "APPROVED" or "REJECTED"
@@ -74,6 +110,32 @@ router.post("/update-status", async (req, res) => {
     
     await dynamoClient.send(new UpdateItemCommand(params));
     res.json({ success: true, message: `Driver status updated to ${status}.` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 2.1 Update Vendor Status (Approve/Reject)
+router.post("/update-vendor-status", async (req, res) => {
+  const { vendorId, status } = req.body; // status: "APPROVED" or "REJECTED"
+  
+  try {
+    const params = {
+      TableName: process.env.DYNAMODB_TABLE_VENDORS || "Vendors",
+      Key: {
+        vendorId: { S: vendorId }
+      },
+      UpdateExpression: "SET #s = :s",
+      ExpressionAttributeNames: {
+        "#s": "status"
+      },
+      ExpressionAttributeValues: {
+        ":s": { S: status }
+      }
+    };
+    
+    await dynamoClient.send(new UpdateItemCommand(params));
+    res.json({ success: true, message: `Vendor status updated to ${status}.` });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -115,24 +177,33 @@ router.get("/stats", async (req, res) => {
     // For a small scale, we can Scan. For large scale, use GSI or metadata tables.
     const driverParams = { TableName: process.env.DYNAMODB_TABLE_DRIVERS };
     const tripParams = { TableName: process.env.DYNAMODB_TABLE_TRIPS };
+    const vendorParams = { TableName: process.env.DYNAMODB_TABLE_VENDORS || "Vendors" };
     
-    const [driversData, tripsData] = await Promise.all([
+    const [driversData, tripsData, vendorsData] = await Promise.all([
       dynamoClient.send(new ScanCommand(driverParams)),
-      dynamoClient.send(new ScanCommand(tripParams))
+      dynamoClient.send(new ScanCommand(tripParams)),
+      dynamoClient.send(new ScanCommand(vendorParams))
     ]);
     
     const totalDrivers = driversData.Items.length;
     const pendingDrivers = driversData.Items.filter(i => i.status?.S === "PENDING_REVIEW").length;
+    
+    const totalVendors = vendorsData.Items.length;
+    const pendingVendors = vendorsData.Items.filter(i => i.status?.S === "PENDING_REVIEW").length;
+
     const totalTrips = tripsData.Items.length;
     const pendingTrips = tripsData.Items.filter(i => i.status?.S === "PENDING").length;
     
     res.json({
       totalDrivers,
       pendingDrivers,
+      totalVendors,
+      pendingVendors,
       totalTrips,
       pendingTrips,
       activeTrips: tripsData.Items.filter(i => i.status?.S === "ACCEPTED").length
     });
+
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
