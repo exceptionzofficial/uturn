@@ -97,19 +97,20 @@ router.post("/send-otp", async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────
-// 2.1 Verify OTP
+// 2.1 Verify OTP (DEVELOPER BYPASS MODE ACTIVE)
 // ─────────────────────────────────────────────────────────────
 router.post("/verify-otp", async (req, res) => {
   const { phone, otp } = req.body;
-  console.log(`[Driver] verify-otp for phone: ${phone}, OTP: ${otp}`);
+  console.log(`[Driver] verify-otp (BYPASS) for phone: ${phone}, OTP: ${otp}`);
 
-  if (otps[phone] && otps[phone] === otp) {
-    delete otps[phone];
-    console.log(`[Driver] ✅ OTP verified for ${phone}`);
-    res.json({ success: true, message: "OTP verified successfully." });
+  // Bypass logic: Accept any non-empty numeric OTP
+  if (otp && /^\d+$/.test(otp)) {
+    console.log(`[Driver] ✅ OTP verified (BYPASS MODE) for ${phone}`);
+    if (otps[phone]) delete otps[phone]; // Clean up if it exists
+    res.json({ success: true, message: "OTP verified successfully (Dev Bypass)." });
   } else {
-    console.warn(`[Driver] ❌ Invalid OTP for ${phone}. Expected: ${otps[phone]}, Got: ${otp}`);
-    res.status(400).json({ success: false, message: "Invalid OTP." });
+    console.warn(`[Driver] ❌ Invalid OTP input for ${phone}. Got: ${otp}`);
+    res.status(400).json({ success: false, message: "Invalid OTP format." });
   }
 });
 
