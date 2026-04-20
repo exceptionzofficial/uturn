@@ -115,4 +115,27 @@ router.post("/:id/reject-commission", async (req, res) => {
   }
 });
 
+// ─────────────────────────────────────────────────────────────
+// Get Available Trips (for Drivers)
+// ─────────────────────────────────────────────────────────────
+router.get("/available", async (req, res) => {
+  console.log(`[Bookings] get available called`);
+  try {
+    const snapshot = await db.collection(TRIPS)
+                             .where("status", "==", "pending")
+                             .orderBy("createdAt", "desc")
+                             .get();
+    
+    const trips = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    
+    res.json(trips);
+  } catch (err) {
+    console.error(`[Bookings] ❌ get available error:`, err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
