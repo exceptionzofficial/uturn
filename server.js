@@ -3,6 +3,7 @@
 // ============================================================
 require("dotenv").config();
 const express = require("express");
+console.log(">>> [SERVER] LOADED AT", new Date().toISOString(), "V2.0");
 const cors = require("cors");
 
 const app = express();
