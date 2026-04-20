@@ -20,6 +20,14 @@ const upload = multer({ storage: multer.memoryStorage() }).fields([
 ]);
 
 // ─────────────────────────────────────────────────────────────
+// Debug Middleware
+// ─────────────────────────────────────────────────────────────
+router.use((req, res, next) => {
+  console.log(`[VendorRouter] Incoming: ${req.method} ${req.url}`);
+  next();
+});
+
+// ─────────────────────────────────────────────────────────────
 // 0. Check Vendor Status
 // ─────────────────────────────────────────────────────────────
 router.post("/check-status", async (req, res) => {
