@@ -32,7 +32,7 @@ app.use((req, res, next) => {
     const duration = Date.now() - start;
     const statusIcon = res.statusCode < 400 ? "✅" : "❌";
     console.log(
-      `${statusIcon} [${new Date().toLocaleTimeString("en-IN")}] ${req.method} ${req.url} → ${res.statusCode} (${duration}ms)`
+      `${statusIcon} [${new Date().toLocaleTimeString("en-IN")}] ${req.method} ${req.originalUrl} → ${res.statusCode} (${duration}ms)`
     );
   });
   next();
