@@ -123,7 +123,6 @@ router.get("/available", async (req, res) => {
   try {
     const snapshot = await db.collection(TRIPS)
                              .where("status", "==", "pending")
-                             .orderBy("createdAt", "desc")
                              .get();
     
     const trips = snapshot.docs.map(doc => ({
@@ -178,7 +177,7 @@ router.get("/driver/:driverId", async (req, res) => {
       query = query.where("status", "==", status);
     }
 
-    const snapshot = await query.orderBy("createdAt", "desc").get();
+    const snapshot = await query.get();
     const trips = snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
