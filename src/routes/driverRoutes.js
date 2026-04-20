@@ -63,32 +63,34 @@ router.post("/send-otp", async (req, res) => {
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
   otps[phone] = otp;
 
-  console.log(`[Driver] Sending OTP to ${phone}: ${otp}`);
+  const apiKey = process.env.FAST2SMS_API_KEY;
+  console.log(`[Driver] send-otp for phone: ${phone}, OTP: ${otp}`);
+  console.log(`[Driver] FAST2SMS_API_KEY present: ${!!apiKey}, length: ${apiKey?.length || 0}, starts: ${apiKey?.substring(0, 8) || 'MISSING'}`);
+
+  const payload = { variables_values: otp, route: "otp", numbers: phone };
+  console.log(`[Driver] Fast2SMS request payload:`, JSON.stringify(payload));
 
   try {
     const response = await axios.post(
       "https://www.fast2sms.com/dev/bulkV2",
-      {
-        variables_values: otp,
-        route: "otp",
-        numbers: phone,
-      },
+      payload,
       {
         headers: {
-          authorization: process.env.FAST2SMS_API_KEY,
+          authorization: apiKey,
           "Content-Type": "application/json",
         },
       }
     );
-
+    console.log(`[Driver] ✅ Fast2SMS status: ${response.status}`);
     console.log(`[Driver] ✅ Fast2SMS response:`, JSON.stringify(response.data));
     res.json({ success: true, message: "OTP sent successfully." });
   } catch (err) {
-    console.error(`[Driver] ❌ Fast2SMS error:`, err.response?.data || err.message);
-    // Return OTP in dev mode if SMS fails
+    console.error(`[Driver] ❌ Fast2SMS HTTP status: ${err.response?.status}`);
+    console.error(`[Driver] ❌ Fast2SMS error body:`, JSON.stringify(err.response?.data));
+    console.error(`[Driver] ❌ Fast2SMS error message:`, err.message);
     res.json({
       success: true,
-      message: "OTP generated (SMS may have failed — check logs).",
+      message: "OTP generated (SMS failed — check logs).",
       devOtp: otp,
     });
   }
