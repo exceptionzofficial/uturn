@@ -21,6 +21,7 @@ const { db } = require("./src/config/firebaseConfig");
 const driverRoutes = require("./src/routes/driverRoutes");
 const adminRoutes  = require("./src/routes/adminRoutes");
 const vendorRoutes = require("./src/routes/vendorRoutes");
+const bookingRoutes = require("./src/routes/bookingRoutes");
 
 app.use(cors());
 app.use(express.json());
@@ -42,6 +43,7 @@ app.use((req, res, next) => {
 app.use("/api/driver", driverRoutes);
 app.use("/api/admin",  adminRoutes);
 app.use("/api/vendor", vendorRoutes);
+app.use("/api/bookings", bookingRoutes);
 
 // ── Health Check ───────────────────────────────────────────
 app.get("/", async (req, res) => {

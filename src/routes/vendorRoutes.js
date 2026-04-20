@@ -259,4 +259,90 @@ router.get("/trip/:tripId", async (req, res) => {
   }
 });
 
+// ─────────────────────────────────────────────────────────────
+// 4. Check Customer (Auto-fill)
+// ─────────────────────────────────────────────────────────────
+router.post("/check-customer", async (req, res) => {
+  const { phone } = req.body;
+  
+  if (!phone || phone.length !== 10) {
+    return res.status(400).json({ error: "Valid 10-digit phone required." });
+  }
+
+  try {
+    // Look for previous trips by customer phone to get their name & language
+    const snapshot = await db.collection(TRIPS)
+                             .where("customerPhone", "==", phone)
+                             .limit(1)
+                             .get();
+    
+    if (!snapshot.empty) {
+      const data = snapshot.docs[0].data();
+      res.json({
+        exists: true,
+        name: data.customerName || "",
+        language: data.customerLanguage || "Tamil"
+      });
+    } else {
+      res.json({ exists: false });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// 5. Trip Management Actions
+// ─────────────────────────────────────────────────────────────
+router.post("/trips/:id/publish", async (req, res) => {
+  const { id } = req.params;
+  try {
+    await db.collection(TRIPS).doc(id).update({ status: "pending" });
+    res.json({ success: true, message: "Trip published." });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/trips/:id/unpublish", async (req, res) => {
+  const { id } = req.params;
+  try {
+    await db.collection(TRIPS).doc(id).update({ status: "draft" });
+    res.json({ success: true, message: "Trip unpublished." });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/trips/:id/cancel", async (req, res) => {
+  const { id } = req.params;
+  try {
+    await db.collection(TRIPS).doc(id).update({ status: "cancelled" });
+    res.json({ success: true, message: "Trip cancelled." });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete("/trips/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    await db.collection(TRIPS).doc(id).delete();
+    res.json({ success: true, message: "Trip deleted." });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put("/trips/:id", async (req, res) => {
+  const { id } = req.params;
+  const tripData = req.body;
+  try {
+    await db.collection(TRIPS).doc(id).update(tripData);
+    res.json({ success: true, message: "Trip updated." });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
