@@ -2,7 +2,6 @@
 // Firebase Admin SDK Configuration
 // Replaces AWS DynamoDB + SNS
 // ============================================================
-require("dotenv").config();
 const { initializeApp, cert, getApps } = require("firebase-admin/app");
 const { getFirestore } = require("firebase-admin/firestore");
 

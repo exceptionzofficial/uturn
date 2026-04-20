@@ -4,7 +4,6 @@
 const express = require("express");
 const router = express.Router();
 const { db } = require("../config/firebaseConfig");
-require("dotenv").config();
 
 const DRIVERS = process.env.FIREBASE_COLLECTION_DRIVERS || "Drivers";
 const VENDORS = process.env.FIREBASE_COLLECTION_VENDORS || "Vendors";

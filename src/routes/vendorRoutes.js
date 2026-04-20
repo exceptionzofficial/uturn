@@ -6,7 +6,6 @@ const router = express.Router();
 const axios = require("axios");
 const multer = require("multer");
 const { db } = require("../config/firebaseConfig");
-require("dotenv").config();
 
 const VENDORS = process.env.FIREBASE_COLLECTION_VENDORS || "Vendors";
 const TRIPS   = process.env.FIREBASE_COLLECTION_TRIPS   || "Trips";

@@ -6,7 +6,6 @@ const router = express.Router();
 const axios = require("axios");
 const multer = require("multer");
 const { db } = require("../config/firebaseConfig");
-require("dotenv").config();
 
 const DRIVERS = process.env.FIREBASE_COLLECTION_DRIVERS || "Drivers";
 
