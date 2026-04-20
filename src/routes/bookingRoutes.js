@@ -19,10 +19,14 @@ router.post("/create", async (req, res) => {
       customerName: tripData.customerName || "",
       customerPhone: tripData.customerPhone || "",
       customerLanguage: tripData.customerLanguage || "Tamil",
-      pickupAddress: tripData.pickupAddress || "",
-      dropAddress: tripData.dropAddress || "",
-      pickupLocation: tripData.pickupLocation || { latitude: 0, longitude: 0 },
-      dropLocation: tripData.dropLocation || { latitude: 0, longitude: 0 },
+      pickupAddress: tripData.pickupAddress || tripData.pickup || "",
+      dropAddress: tripData.dropAddress || tripData.drop || "",
+      pickup: tripData.pickup || tripData.pickupAddress || "",
+      drop: tripData.drop || tripData.dropAddress || "",
+      pickupLocation: tripData.pickupLocation || tripData.pickupCoords || { latitude: 0, longitude: 0 },
+      dropLocation: tripData.dropLocation || tripData.dropCoords || { latitude: 0, longitude: 0 },
+      pickupCoords: tripData.pickupCoords || tripData.pickupLocation || { latitude: 0, longitude: 0 },
+      dropCoords: tripData.dropCoords || tripData.dropLocation || { latitude: 0, longitude: 0 },
       tripType: tripData.tripType || "oneWay",
       vehicleType: tripData.vehicleType || "Sedan",
       scheduleDate: tripData.scheduleDate || "",
@@ -35,9 +39,11 @@ router.post("/create", async (req, res) => {
       vendorCommissionPercentage: tripData.vendorCommissionPercentage || 0,
       waitingChargesPerMin: tripData.waitingChargesPerMin || 0,
       waitingChargesPerHour: (tripData.waitingChargesPerMin || 0) * 60,
-      packageAmount: tripData.totalFare || 0,
-      estimatedFare: tripData.totalFare || 0,
-      totalAmount: tripData.totalFare || 0,
+      packageAmount: tripData.totalFare || tripData.totalTripAmount || 0,
+      estimatedFare: tripData.totalFare || tripData.totalTripAmount || 0,
+      totalAmount: tripData.totalFare || tripData.totalTripAmount || 0,
+      totalTripAmount: tripData.totalTripAmount || tripData.totalFare || 0,
+      totalFare: tripData.totalFare || tripData.totalTripAmount || 0,
       paymentMode: tripData.paymentMode || "customer_pays_driver",
       additionalStops: tripData.additionalStops || [],
       status: tripData.status || "pending",
@@ -59,7 +65,7 @@ router.post("/create", async (req, res) => {
 router.post("/:id/approve-driver", async (req, res) => {
   const { id } = req.params;
   try {
-    await db.collection(TRIPS).doc(id).update({ status: "vendor_approved" });
+    await db.collection(TRIPS).doc(id).update({ status: "vendorApproved" });
     res.json({ success: true, message: "Driver approved." });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -80,7 +86,7 @@ router.post("/:id/reject-driver", async (req, res) => {
 router.post("/:id/verify-payment", async (req, res) => {
   const { id } = req.params;
   try {
-    await db.collection(TRIPS).doc(id).update({ status: "commission_pending" });
+    await db.collection(TRIPS).doc(id).update({ status: "commissionPending" });
     res.json({ success: true, message: "Payment verified." });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -102,7 +108,7 @@ router.post("/:id/reject-commission", async (req, res) => {
   const { id } = req.params;
   const { reason } = req.body;
   try {
-    await db.collection(TRIPS).doc(id).update({ status: "commission_pending", commissionRejectReason: reason || "" });
+    await db.collection(TRIPS).doc(id).update({ status: "commissionPending", commissionRejectReason: reason || "" });
     res.json({ success: true, message: "Commission rejected." });
   } catch (err) {
     res.status(500).json({ error: err.message });

@@ -51,6 +51,23 @@ router.post("/check-status", async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────
+// 0.0 Get Vendor Profile
+// ─────────────────────────────────────────────────────────────
+router.get("/profile/:phone", async (req, res) => {
+  const { phone } = req.params;
+  try {
+    const doc = await db.collection(VENDORS).doc(phone).get();
+    if (doc.exists) {
+      res.json({ success: true, vendor: doc.data() });
+    } else {
+      res.status(404).json({ success: false, message: "Vendor not found" });
+    }
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
 // 0.1 Send OTP via Fast2SMS
 // ─────────────────────────────────────────────────────────────
 router.post("/send-otp", async (req, res) => {
@@ -119,23 +136,37 @@ router.post("/register", upload, async (req, res) => {
     const vendorData = JSON.parse(req.body.vendorData);
     console.log(`[Vendor] Registering vendor: ${vendorData.name} (${vendorData.phone})`);
 
+    // In a real app, we'd upload these to S3/Cloud Storage. 
+    // Here we'll store basic info. If you need actual image URLs, 
+    // we would use a proper storage service.
+    const aadharImage = req.files["aadharImage"] ? "UPLOADED" : "";
+    const profilePicture = req.files["profilePicture"] ? "UPLOADED" : "";
+
     const vendorDoc = {
       vendorId: vendorData.phone,
+      phone: vendorData.phone,
       name: vendorData.name,
       dob: vendorData.dob || "",
       businessName: vendorData.businessName || "",
       gstNumber: vendorData.gstNumber || "",
       state: vendorData.state || "",
       address: vendorData.address || "",
-      status: "PENDING_REVIEW",
-      aadharImage: "",
-      profilePicture: "",
+      status: "pending", // Standardized status
+      aadharImage,
+      profilePicture,
+      updatedAt: new Date().toISOString(),
       createdAt: new Date().toISOString(),
     };
 
+    // Save to Firestore
     await db.collection(VENDORS).doc(vendorData.phone).set(vendorDoc);
+    
     console.log(`[Vendor] ✅ Vendor registered: ${vendorData.phone}`);
-    res.json({ success: true, message: "Vendor registered successfully. Awaiting review." });
+    res.json({ 
+      success: true, 
+      message: "Vendor registered successfully. Review pending.",
+      vendor: vendorDoc 
+    });
   } catch (err) {
     console.error(`[Vendor] ❌ register error:`, err.message);
     res.status(500).json({ error: err.message });
@@ -160,15 +191,17 @@ router.post("/create-trip", async (req, res) => {
       category: tripData.category || "Passenger",
       numberOfPeople: tripData.numberOfPeople || 1,
       loadCapacity: tripData.loadCapacity || "",
-      pickup: tripData.pickup || "",
-      drop: tripData.drop || "",
+      pickup: tripData.pickup || tripData.pickupAddress || "",
+      drop: tripData.drop || tripData.dropAddress || "",
+      pickupAddress: tripData.pickupAddress || tripData.pickup || "",
+      dropAddress: tripData.dropAddress || tripData.drop || "",
       pickupCoords: {
-        latitude: tripData.pickupCoords?.latitude || 0,
-        longitude: tripData.pickupCoords?.longitude || 0,
+        latitude: tripData.pickupCoords?.latitude || tripData.pickupLocation?.latitude || 0,
+        longitude: tripData.pickupCoords?.longitude || tripData.pickupLocation?.longitude || 0,
       },
       dropCoords: {
-        latitude: tripData.dropCoords?.latitude || 0,
-        longitude: tripData.dropCoords?.longitude || 0,
+        latitude: tripData.dropCoords?.latitude || tripData.dropLocation?.latitude || 0,
+        longitude: tripData.dropCoords?.longitude || tripData.dropLocation?.longitude || 0,
       },
       tripType: tripData.tripType || "One Way",
       rentalType: tripData.rentalType || "",
@@ -184,10 +217,11 @@ router.post("/create-trip", async (req, res) => {
       nightAllowance: tripData.nightAllowance || 0,
       hillsAllowance: tripData.hillsAllowance || 0,
       commission: tripData.commission || 0,
-      totalTripAmount: tripData.totalTripAmount || 0,
+      totalTripAmount: tripData.totalTripAmount || tripData.totalFare || 0,
+      totalFare: tripData.totalFare || tripData.totalTripAmount || 0,
       driverPayout: tripData.driverPayout || 0,
       paymentMode: tripData.paymentMode || "pay_driver",
-      status: "PENDING",
+      status: tripData.status || "pending",
       createdAt: new Date().toISOString(),
     };
 
@@ -220,10 +254,10 @@ router.get("/trips", async (req, res) => {
         tripId: d.tripId,
         customerName: d.customerName,
         customerPhone: d.customerPhone,
-        pickup: d.pickup,
-        drop: d.drop,
+        pickup: d.pickup || d.pickupAddress || "",
+        drop: d.drop || d.dropAddress || "",
         status: d.status,
-        totalTripAmount: d.totalTripAmount,
+        totalTripAmount: d.totalTripAmount || d.totalFare || 0,
         createdAt: d.createdAt,
       };
     });
