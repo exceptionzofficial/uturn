@@ -138,4 +138,56 @@ router.get("/available", async (req, res) => {
   }
 });
 
+// ─────────────────────────────────────────────────────────────
+// Accept Trip (Driver assigns themselves)
+// ─────────────────────────────────────────────────────────────
+router.post("/:id/accept", async (req, res) => {
+  const { id } = req.params;
+  const { driverId } = req.body;
+  console.log(`[Bookings] Accept called for trip: ${id}, driver: ${driverId}`);
+  try {
+    const tripRef = db.collection(TRIPS).doc(id);
+    const trip = await tripRef.get();
+    
+    if (!trip.exists) return res.status(404).json({ error: "Trip not found" });
+    if (trip.data().status !== "pending") return res.status(400).json({ error: "Trip is no longer available" });
+
+    await tripRef.update({
+      status: "driverAccepted",
+      driverId: driverId,
+      acceptedAt: new Date().toISOString()
+    });
+
+    res.json({ success: true, message: "Trip accepted successfully." });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// Get Driver Trips (History/Active)
+// ─────────────────────────────────────────────────────────────
+router.get("/driver/:driverId", async (req, res) => {
+  const { driverId } = req.params;
+  const { status } = req.query; 
+  console.log(`[Bookings] Get driver trips: ${driverId}, status: ${status}`);
+  try {
+    let query = db.collection(TRIPS).where("driverId", "==", driverId);
+    
+    if (status) {
+      query = query.where("status", "==", status);
+    }
+
+    const snapshot = await query.orderBy("createdAt", "desc").get();
+    const trips = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+
+    res.json(trips);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
