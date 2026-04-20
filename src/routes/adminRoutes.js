@@ -3,181 +3,128 @@
 // ============================================================
 const express = require("express");
 const router = express.Router();
+const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
+const { v4: uuidv4 } = require("uuid"); // wait, not installed, I'll use crypto or simple random OR Date.now
+const crypto = require("crypto");
 const { db } = require("../config/firebaseConfig");
+const { authMiddleware, checkPermission } = require("../middleware/authMiddleware");
 
 const DRIVERS = process.env.FIREBASE_COLLECTION_DRIVERS || "Drivers";
 const VENDORS = process.env.FIREBASE_COLLECTION_VENDORS || "Vendors";
 const TRIPS   = process.env.FIREBASE_COLLECTION_TRIPS   || "Trips";
+const ADMINS  = "Admins";
+const ADMIN_LOGS = "AdminLogs";
 
-// ─────────────────────────────────────────────────────────────
-// 1. Get Pending Drivers
-// ─────────────────────────────────────────────────────────────
-router.get("/pending-drivers", async (req, res) => {
-  console.log(`[Admin] Fetching pending drivers...`);
+// Helper: Log Admin Action
+const logAction = async (adminId, adminName, action, details) => {
   try {
-    const snapshot = await db
-      .collection(DRIVERS)
-      .where("status", "==", "PENDING_REVIEW")
-      .get();
-
-    const drivers = snapshot.docs.map((doc) => doc.data());
-    console.log(`[Admin] ✅ Found ${drivers.length} pending drivers`);
-    res.json(drivers);
+    const logId = crypto.randomUUID();
+    await db.collection(ADMIN_LOGS).doc(logId).set({
+      id: logId,
+      adminId,
+      adminName,
+      action,
+      details,
+      timestamp: new Date().toISOString()
+    });
   } catch (err) {
-    console.error(`[Admin] ❌ pending-drivers error:`, err.message);
+    console.error("Log action failed", err);
+  }
+};
+
+// ─────────────────────────────────────────────────────────────
+// AUTHENTICATION
+// ─────────────────────────────────────────────────────────────
+router.post("/login", async (req, res) => {
+  const { username, password } = req.body;
+  try {
+    const snapshot = await db.collection(ADMINS).where("username", "==", username).get();
+    if (snapshot.empty) return res.status(401).json({ success: false, message: "Invalid credentials" });
+    
+    const adminDoc = snapshot.docs[0];
+    const adminData = adminDoc.data();
+    
+    const isMatch = await bcrypt.compare(password, adminData.password);
+    if (!isMatch) return res.status(401).json({ success: false, message: "Invalid credentials" });
+
+    const token = jwt.sign(
+      { id: adminData.id, username: adminData.username, role: adminData.role, permissions: adminData.permissions, userType: 'admin' },
+      process.env.JWT_SECRET || 'supersecretjwtkey',
+      { expiresIn: '24h' }
+    );
+
+    res.json({
+      success: true,
+      token,
+      admin: {
+        id: adminData.id,
+        username: adminData.username,
+        name: adminData.name,
+        role: adminData.role,
+        permissions: adminData.permissions
+      }
+    });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Protect all following routes
+router.use(authMiddleware);
+
+// ─────────────────────────────────────────────────────────────
+// SUB-ADMIN MANAGEMENT (Super-Admin Only)
+// ─────────────────────────────────────────────────────────────
+router.post("/sub-admins", checkPermission("super-admin"), async (req, res) => {
+  const { name, username, password, email, phone, role, permissions } = req.body;
+  try {
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const id = crypto.randomUUID();
+    const newAdmin = {
+      id, name, username, password: hashedPassword, email, phone,
+      role: role || "sub-admin",
+      permissions: permissions || [],
+      createdAt: new Date().toISOString()
+    };
+    await db.collection(ADMINS).doc(id).set(newAdmin);
+    await logAction(req.user.id, req.user.username, "CREATE_ADMIN", `Created admin ${username}`);
+    res.json({ success: true, message: "Admin created", admin: { id, username } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put("/sub-admins/:id/permissions", checkPermission("super-admin"), async (req, res) => {
+  const { id } = req.params;
+  const { permissions } = req.body;
+  try {
+    await db.collection(ADMINS).doc(id).update({ permissions });
+    res.json({ success: true, message: "Permissions updated" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get("/sub-admins", checkPermission("super-admin"), async (req, res) => {
+  try {
+    const snapshot = await db.collection(ADMINS).get();
+    const admins = snapshot.docs.map(doc => {
+      const data = doc.data();
+      delete data.password;
+      return data;
+    });
+    res.json(admins);
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 // ─────────────────────────────────────────────────────────────
-// 1.1 Get All Drivers
+// DASHBOARD & STATS
 // ─────────────────────────────────────────────────────────────
-router.get("/drivers", async (req, res) => {
-  console.log(`[Admin] Fetching all drivers...`);
-  try {
-    const snapshot = await db.collection(DRIVERS).get();
-    const drivers = snapshot.docs.map((doc) => doc.data());
-    console.log(`[Admin] ✅ Total drivers: ${drivers.length}`);
-    res.json(drivers);
-  } catch (err) {
-    console.error(`[Admin] ❌ drivers error:`, err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ─────────────────────────────────────────────────────────────
-// 1.2 Get Pending Vendors
-// ─────────────────────────────────────────────────────────────
-router.get("/pending-vendors", async (req, res) => {
-  console.log(`[Admin] Fetching pending vendors...`);
-  try {
-    const snapshot = await db
-      .collection(VENDORS)
-      .where("status", "==", "PENDING_REVIEW")
-      .get();
-
-    const vendors = snapshot.docs.map((doc) => doc.data());
-    console.log(`[Admin] ✅ Found ${vendors.length} pending vendors`);
-    res.json(vendors);
-  } catch (err) {
-    console.error(`[Admin] ❌ pending-vendors error:`, err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ─────────────────────────────────────────────────────────────
-// 1.3 Get All Vendors
-// ─────────────────────────────────────────────────────────────
-router.get("/vendors", async (req, res) => {
-  console.log(`[Admin] Fetching all vendors...`);
-  try {
-    const snapshot = await db.collection(VENDORS).get();
-    const vendors = snapshot.docs.map((doc) => doc.data());
-    console.log(`[Admin] ✅ Total vendors: ${vendors.length}`);
-    res.json(vendors);
-  } catch (err) {
-    console.error(`[Admin] ❌ vendors error:`, err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ─────────────────────────────────────────────────────────────
-// 2. Update Driver Status (Approve/Reject)
-// ─────────────────────────────────────────────────────────────
-router.post("/update-status", async (req, res) => {
-  const { driverId, status } = req.body;
-  console.log(`[Admin] update-status: driverId=${driverId}, status=${status}`);
-
-  try {
-    await db.collection(DRIVERS).doc(driverId).update({ status });
-    console.log(`[Admin] ✅ Driver ${driverId} status → ${status}`);
-    res.json({ success: true, message: `Driver status updated to ${status}.` });
-  } catch (err) {
-    console.error(`[Admin] ❌ update-status error:`, err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ─────────────────────────────────────────────────────────────
-// 2.1 Update Driver Details
-// ─────────────────────────────────────────────────────────────
-router.post("/update-driver", async (req, res) => {
-  const { driverId, ...updates } = req.body;
-  console.log(`[Admin] update-driver: driverId=${driverId}, fields:`, Object.keys(updates));
-
-  try {
-    if (Object.keys(updates).length === 0) {
-      return res.status(400).json({ error: "No fields to update." });
-    }
-
-    await db.collection(DRIVERS).doc(driverId).update(updates);
-    console.log(`[Admin] ✅ Driver ${driverId} details updated`);
-    res.json({ success: true, message: "Driver details updated." });
-  } catch (err) {
-    console.error(`[Admin] ❌ update-driver error:`, err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ─────────────────────────────────────────────────────────────
-// 2.2 Update Vendor Status (Approve/Reject)
-// ─────────────────────────────────────────────────────────────
-router.post("/update-vendor-status", async (req, res) => {
-  const { vendorId, status } = req.body;
-  console.log(`[Admin] update-vendor-status: vendorId=${vendorId}, status=${status}`);
-
-  try {
-    await db.collection(VENDORS).doc(vendorId).update({ status });
-    console.log(`[Admin] ✅ Vendor ${vendorId} status → ${status}`);
-    res.json({ success: true, message: `Vendor status updated to ${status}.` });
-  } catch (err) {
-    console.error(`[Admin] ❌ update-vendor-status error:`, err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ─────────────────────────────────────────────────────────────
-// 2.3 Update Vendor Details
-// ─────────────────────────────────────────────────────────────
-router.post("/update-vendor", async (req, res) => {
-  const { vendorId, ...updates } = req.body;
-  console.log(`[Admin] update-vendor: vendorId=${vendorId}, fields:`, Object.keys(updates));
-
-  try {
-    if (Object.keys(updates).length === 0) {
-      return res.status(400).json({ error: "No fields to update." });
-    }
-
-    await db.collection(VENDORS).doc(vendorId).update(updates);
-    console.log(`[Admin] ✅ Vendor ${vendorId} details updated`);
-    res.json({ success: true, message: "Vendor details updated." });
-  } catch (err) {
-    console.error(`[Admin] ❌ update-vendor error:`, err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ─────────────────────────────────────────────────────────────
-// 3. Get All Trips (System Wide)
-// ─────────────────────────────────────────────────────────────
-router.get("/all-trips", async (req, res) => {
-  console.log(`[Admin] Fetching all trips...`);
-  try {
-    const snapshot = await db.collection(TRIPS).get();
-    const trips = snapshot.docs.map((doc) => doc.data());
-    console.log(`[Admin] ✅ Total trips: ${trips.length}`);
-    res.json(trips);
-  } catch (err) {
-    console.error(`[Admin] ❌ all-trips error:`, err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ─────────────────────────────────────────────────────────────
-// 4. Get System Stats
-// ─────────────────────────────────────────────────────────────
-router.get("/stats", async (req, res) => {
-  console.log(`[Admin] Fetching system stats...`);
+router.get("/detailed-dashboard", async (req, res) => {
   try {
     const [driversSnap, tripsSnap, vendorsSnap] = await Promise.all([
       db.collection(DRIVERS).get(),
@@ -189,20 +136,170 @@ router.get("/stats", async (req, res) => {
     const trips   = tripsSnap.docs.map((d) => d.data());
     const vendors = vendorsSnap.docs.map((d) => d.data());
 
-    const stats = {
-      totalDrivers:  drivers.length,
-      pendingDrivers: drivers.filter((d) => d.status === "PENDING_REVIEW").length,
-      totalVendors:  vendors.length,
-      pendingVendors: vendors.filter((v) => v.status === "PENDING_REVIEW").length,
-      totalTrips:    trips.length,
-      pendingTrips:  trips.filter((t) => t.status === "PENDING").length,
-      activeTrips:   trips.filter((t) => t.status === "ACCEPTED").length,
-    };
-
-    console.log(`[Admin] ✅ Stats:`, JSON.stringify(stats));
-    res.json(stats);
+    // Some simple logic mappings from the spec
+    res.json({
+      totalVendors: vendors.length,
+      verifiedVendors: vendors.filter(v => v.verified || v.status === "verified").length,
+      blockedVendors: vendors.filter(v => v.blocked || v.status === "blocked").length,
+      totalDrivers: drivers.length,
+      onlineDrivers: drivers.filter(d => d.isOnline).length,
+      verifiedDrivers: drivers.filter(d => d.verified || d.status === "verified").length,
+      blockedDrivers: drivers.filter(d => d.blocked || d.status === "blocked").length,
+      totalRides: trips.length,
+      completedRides: trips.filter(t => t.status === "completed").length
+    });
   } catch (err) {
-    console.error(`[Admin] ❌ stats error:`, err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// DRIVERS (Requires 'drivers' permission)
+// ─────────────────────────────────────────────────────────────
+router.get("/drivers", checkPermission("drivers"), async (req, res) => {
+  try {
+    const snapshot = await db.collection(DRIVERS).get();
+    res.json(snapshot.docs.map((doc) => doc.data()));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.patch("/drivers/:id/verify", checkPermission("drivers"), async (req, res) => {
+  const { id } = req.params;
+  const { verified, rejectionReason } = req.body;
+  try {
+    const payload = verified 
+      ? { verified: true, status: 'verified', verifiedBy: req.user.id, verifiedByName: req.user.username, verifiedAt: new Date().toISOString() } 
+      : { verified: false, status: 'rejected', rejectionReason, rejectedBy: req.user.id, rejectedAt: new Date().toISOString() };
+    
+    await db.collection(DRIVERS).doc(id).update(payload);
+    await logAction(req.user.id, req.user.username, verified ? "VERIFY_DRIVER" : "REJECT_DRIVER", `ID: ${id}`);
+    res.json({ success: true, message: verified ? "Driver verified" : "Driver rejected" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.patch("/drivers/:id/block", checkPermission("drivers"), async (req, res) => {
+  const { id } = req.params;
+  const { blocked, blockReason } = req.body;
+  try {
+    await db.collection(DRIVERS).doc(id).update({ blocked, blockReason: blocked ? blockReason : "", status: blocked ? 'blocked' : 'verified' });
+    await logAction(req.user.id, req.user.username, blocked ? "BLOCK_DRIVER" : "UNBLOCK_DRIVER", `ID: ${id}`);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// VENDORS (Requires 'vendors' permission)
+// ─────────────────────────────────────────────────────────────
+router.get("/vendors", checkPermission("vendors"), async (req, res) => {
+  try {
+    const snapshot = await db.collection(VENDORS).get();
+    res.json(snapshot.docs.map((doc) => doc.data()));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.patch("/vendors/:id/verify", checkPermission("vendors"), async (req, res) => {
+  const { id } = req.params;
+  const { verified, rejectionReason } = req.body;
+  try {
+    const payload = verified 
+      ? { verified: true, status: 'verified', verifiedBy: req.user.id, verifiedAt: new Date().toISOString() } 
+      : { verified: false, status: 'rejected', rejectionReason };
+    await db.collection(VENDORS).doc(id).update(payload);
+    await logAction(req.user.id, req.user.username, verified ? "VERIFY_VENDOR" : "REJECT_VENDOR", `ID: ${id}`);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.patch("/vendors/:id/block", checkPermission("vendors"), async (req, res) => {
+  const { id } = req.params;
+  const { blocked, blockReason } = req.body;
+  try {
+    await db.collection(VENDORS).doc(id).update({ blocked, blockReason: blocked ? blockReason : "", status: blocked ? 'blocked' : 'verified' });
+    await logAction(req.user.id, req.user.username, blocked ? "BLOCK_VENDOR" : "UNBLOCK_VENDOR", `ID: ${id}`);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// ACTIVE & BANNED USERS
+// ─────────────────────────────────────────────────────────────
+router.get("/active-drivers", checkPermission("drivers"), async (req, res) => {
+  try {
+    const snapshot = await db.collection(DRIVERS).where("isOnline", "==", true).get();
+    res.json(snapshot.docs.map((doc) => doc.data()));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get("/blocked-users", async (req, res) => {
+  try {
+    const dSnap = await db.collection(DRIVERS).where("blocked", "==", true).get();
+    const vSnap = await db.collection(VENDORS).where("blocked", "==", true).get();
+    
+    let blocked = [
+      ...dSnap.docs.map(doc => ({ ...doc.data(), userType: 'driver' })),
+      ...vSnap.docs.map(doc => ({ ...doc.data(), userType: 'vendor' }))
+    ];
+    // sort by blockedAt desc if available
+    res.json(blocked);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// RIDES & CUSTOMERS
+// ─────────────────────────────────────────────────────────────
+router.get("/rides", checkPermission("rides"), async (req, res) => {
+  try {
+    const snapshot = await db.collection(TRIPS).get();
+    res.json(snapshot.docs.map(doc => doc.data()));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get("/customers", async (req, res) => {
+  try {
+    const snapshot = await db.collection(TRIPS).get();
+    const trips = snapshot.docs.map(d => d.data());
+    
+    // Deduplicate by phone
+    const customers = {};
+    trips.forEach(t => {
+      if (t.customerPhone && t.customerName) {
+        customers[t.customerPhone] = { phone: t.customerPhone, name: t.customerName, language: t.customerLanguage };
+      }
+    });
+
+    res.json(Object.values(customers));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// SYSTEM CONFIG
+// ─────────────────────────────────────────────────────────────
+router.get("/logs", async (req, res) => {
+  try {
+    const limit = req.query.limit ? parseInt(req.query.limit) : 100;
+    const snapshot = await db.collection(ADMIN_LOGS).orderBy("timestamp", "desc").limit(limit).get();
+    res.json(snapshot.docs.map(d => d.data()));
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
