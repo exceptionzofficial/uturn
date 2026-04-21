@@ -40,13 +40,21 @@ router.post("/login", async (req, res) => {
   const { username, password } = req.body;
   try {
     const snapshot = await db.collection(ADMINS).where("username", "==", username).get();
-    if (snapshot.empty) return res.status(401).json({ success: false, message: "Invalid credentials" });
+    if (snapshot.empty) {
+      console.log(`[Admin Login] ❌ Username not found: ${username}`);
+      return res.status(401).json({ success: false, message: "Invalid credentials" });
+    }
     
     const adminDoc = snapshot.docs[0];
     const adminData = adminDoc.data();
     
     const isMatch = await bcrypt.compare(password, adminData.password);
-    if (!isMatch) return res.status(401).json({ success: false, message: "Invalid credentials" });
+    if (!isMatch) {
+      console.log(`[Admin Login] ❌ Password mismatch for: ${username}`);
+      return res.status(401).json({ success: false, message: "Invalid credentials" });
+    }
+
+    console.log(`[Admin Login] ✅ Success for: ${username}`);
 
     const token = jwt.sign(
       { id: adminData.id, username: adminData.username, role: adminData.role, permissions: adminData.permissions, userType: 'admin' },

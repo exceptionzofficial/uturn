@@ -141,14 +141,19 @@ router.post("/register", upload, async (req, res) => {
   console.log(`[Vendor] register called`);
 
   try {
+    if (!req.body.vendorData) {
+      throw new Error("Missing 'vendorData' in request body");
+    }
     const vendorData = JSON.parse(req.body.vendorData);
+    if (!vendorData.phone) throw new Error("Vendor phone missing in vendorData");
+
     console.log(`[Vendor] Registering vendor: ${vendorData.name} (${vendorData.phone})`);
 
     // In a real app, we'd upload these to S3/Cloud Storage. 
     // Here we'll store basic info. If you need actual image URLs, 
     // we would use a proper storage service.
-    const aadharImage = req.files["aadharImage"] ? "UPLOADED" : "";
-    const profilePicture = req.files["profilePicture"] ? "UPLOADED" : "";
+    const aadharImage = (req.files && req.files["aadharImage"]) ? "UPLOADED" : "";
+    const profilePicture = (req.files && req.files["profilePicture"]) ? "UPLOADED" : "";
 
     const vendorDoc = {
       vendorId: vendorData.phone,
