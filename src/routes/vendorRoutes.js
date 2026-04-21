@@ -127,7 +127,18 @@ router.post("/verify-otp", async (req, res) => {
   if (otp && /^\d+$/.test(otp)) {
     console.log(`[Vendor] ✅ OTP verified (BYPASS MODE) for ${phone}`);
     if (otps[phone]) delete otps[phone]; // Clean up if it exists
-    res.json({ success: true, message: "OTP verified successfully (Dev Bypass)." });
+    // Check if vendor exists to return status
+    const vendorDoc = await db.collection(VENDORS).doc(phone).get();
+    let status = 'NOT_REGISTERED';
+    if (vendorDoc.exists) {
+      status = vendorDoc.data().status || 'PENDING_REVIEW';
+    }
+
+    res.json({ 
+      success: true, 
+      status: status,
+      message: "OTP verified successfully (Dev Bypass)." 
+    });
   } else {
     console.warn(`[Vendor] ❌ Invalid OTP input for ${phone}. Got: ${otp}`);
     res.status(400).json({ success: false, message: "Invalid OTP format." });
