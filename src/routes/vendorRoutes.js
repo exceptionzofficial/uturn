@@ -248,6 +248,8 @@ router.post("/create-trip", async (req, res) => {
       scheduledTime: tripData.scheduledTime || "",
       returnDate: tripData.returnDate || "",
       returnTime: tripData.returnTime || "",
+      distance: tripData.distance || tripData.estimatedDistance || "0 km",
+      distanceCharge: tripData.distanceCharge || 0,
       baseFare: tripData.baseFare || 0,
       perKmRate: tripData.perKmRate || 0,
       waitingCharge: tripData.waitingCharge || 0,
