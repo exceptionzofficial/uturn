@@ -5,6 +5,8 @@ const express = require("express");
 const router = express.Router();
 const axios = require("axios");
 const multer = require("multer");
+const fs = require("fs");
+const path = require("path");
 const { db } = require("../config/firebaseConfig");
 
 const VENDORS = process.env.FIREBASE_COLLECTION_VENDORS || "Vendors";
