@@ -163,8 +163,8 @@ router.post("/register", upload, async (req, res) => {
     // In a real app, we'd upload these to S3/Cloud Storage. 
     // Here we'll store basic info. If you need actual image URLs, 
     // we would use a proper storage service.
-    const aadharImage = (req.files && req.files["aadharImage"]) ? "UPLOADED" : "";
-    const profilePicture = (req.files && req.files["profilePicture"]) ? "UPLOADED" : "";
+    const aadharImage = (req.files && req.files["aadharImage"]) ? `/uploads/${req.files["aadharImage"][0].filename}` : "";
+    const profilePicture = (req.files && req.files["profilePicture"]) ? `/uploads/${req.files["profilePicture"][0].filename}` : "";
 
     const vendorDoc = {
       vendorId: vendorData.phone,

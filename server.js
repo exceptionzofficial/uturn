@@ -26,6 +26,7 @@ const bookingRoutes = require("./src/routes/bookingRoutes");
 
 app.use(cors());
 app.use(express.json());
+app.use('/uploads', express.static('uploads'));
 
 // ── Request Logger ─────────────────────────────────────────
 app.use((req, res, next) => {

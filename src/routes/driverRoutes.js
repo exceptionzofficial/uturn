@@ -152,6 +152,8 @@ router.post("/register", upload, async (req, res) => {
     console.log(`[Driver] Registering driver: ${driverData.name} (${driverData.phone})`);
 
     // Note: File URLs are empty strings — integrate Firebase Storage / Cloudinary for file uploads
+    const getFilePath = (fieldname) => (req.files && req.files[fieldname]) ? `/uploads/${req.files[fieldname][0].filename}` : "";
+
     const driverDoc = {
       driverId: driverData.phone,
       name: driverData.name,
@@ -163,15 +165,15 @@ router.post("/register", upload, async (req, res) => {
       licenceExpiry: driverData.licenceExpiry || "",
       vehicleNumber: driverData.vehicleNumber || "",
       vehicleType: driverData.vehicleType || "",
-      status: "PENDING_REVIEW",
-      profilePhoto: "",
-      aadhaarFront: "",
-      dlFront: "",
-      dlBack: "",
-      rcFront: "",
-      insuranceFront: "",
-      fcFront: "",
-      permitFront: "",
+      status: "PENDING",
+      profilePhoto: getFilePath("profilePhoto"),
+      aadhaarFront: getFilePath("aadhaarFront"),
+      dlFront: getFilePath("dlFront"),
+      dlBack: getFilePath("dlBack"),
+      rcFront: getFilePath("rcFront"),
+      insuranceFront: getFilePath("insuranceFront"),
+      fcFront: getFilePath("fcFront"),
+      permitFront: getFilePath("permitFront"),
       createdAt: new Date().toISOString(),
     };
 
