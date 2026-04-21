@@ -13,10 +13,22 @@ const TRIPS   = process.env.FIREBASE_COLLECTION_TRIPS   || "Trips";
 // In-memory OTP store
 const otps = {};
 
-// Multer memory storage (no S3)
-const upload = multer({ storage: multer.memoryStorage() }).fields([
-  { name: "profilePicture", maxCount: 1 },
+// Configure storage to preserve extensions
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    const dir = 'uploads/';
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir);
+    cb(null, dir);
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({ storage: storage }).fields([
   { name: "aadharImage", maxCount: 1 },
+  { name: "profilePicture", maxCount: 1 },
 ]);
 
 // ─────────────────────────────────────────────────────────────

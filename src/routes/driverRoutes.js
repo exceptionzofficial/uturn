@@ -12,8 +12,20 @@ const DRIVERS = process.env.FIREBASE_COLLECTION_DRIVERS || "Drivers";
 // In-memory OTP store (use Redis/Firestore for production)
 const otps = {};
 
-// Multer: store files in memory (no S3 — use Firebase Storage or Cloudinary later)
-const upload = multer({ storage: multer.memoryStorage() }).fields([
+// Configure storage to preserve extensions
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    const dir = 'uploads/';
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir);
+    cb(null, dir);
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({ storage: storage }).fields([
   { name: "profilePhoto", maxCount: 1 },
   { name: "aadhaarFront", maxCount: 1 },
   { name: "dlFront", maxCount: 1 },
