@@ -175,7 +175,7 @@ router.post("/register", upload, async (req, res) => {
       gstNumber: vendorData.gstNumber || "",
       state: vendorData.state || "",
       address: vendorData.address || "",
-      status: "pending", // Standardized status
+      status: "PENDING", // Standardized status
       aadharImage,
       profilePicture,
       updatedAt: new Date().toISOString(),
