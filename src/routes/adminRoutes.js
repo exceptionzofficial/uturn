@@ -182,8 +182,8 @@ router.patch("/drivers/:id/verify", checkPermission("drivers"), async (req, res)
   const { verified, rejectionReason } = req.body;
   try {
     const payload = verified 
-      ? { verified: true, status: 'verified', verifiedBy: req.user.id, verifiedByName: req.user.username, verifiedAt: new Date().toISOString() } 
-      : { verified: false, status: 'rejected', rejectionReason, rejectedBy: req.user.id, rejectedAt: new Date().toISOString() };
+      ? { verified: true, status: 'APPROVED', verifiedBy: req.user.id, verifiedByName: req.user.username, verifiedAt: new Date().toISOString() } 
+      : { verified: false, status: 'REJECTED', rejectionReason, rejectedBy: req.user.id, rejectedAt: new Date().toISOString() };
     
     await db.collection(DRIVERS).doc(id).update(payload);
     await logAction(req.user.id, req.user.username, verified ? "VERIFY_DRIVER" : "REJECT_DRIVER", `ID: ${id}`);
@@ -222,8 +222,8 @@ router.patch("/vendors/:id/verify", checkPermission("vendors"), async (req, res)
   const { verified, rejectionReason } = req.body;
   try {
     const payload = verified 
-      ? { verified: true, status: 'verified', verifiedBy: req.user.id, verifiedAt: new Date().toISOString() } 
-      : { verified: false, status: 'rejected', rejectionReason };
+      ? { verified: true, status: 'APPROVED', verifiedBy: req.user.id, verifiedAt: new Date().toISOString() } 
+      : { verified: false, status: 'REJECTED', rejectionReason };
     await db.collection(VENDORS).doc(id).update(payload);
     await logAction(req.user.id, req.user.username, verified ? "VERIFY_VENDOR" : "REJECT_VENDOR", `ID: ${id}`);
     res.json({ success: true });
