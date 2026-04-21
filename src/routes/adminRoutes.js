@@ -244,6 +244,31 @@ router.patch("/vendors/:id/block", checkPermission("vendors"), async (req, res) 
   }
 });
 
+// NEW: General Update Vendor
+router.post("/update-vendor", checkPermission("vendors"), async (req, res) => {
+  const { vendorId, ...updateData } = req.body;
+  try {
+    await db.collection(VENDORS).doc(vendorId).update(updateData);
+    await logAction(req.user.id, req.user.username, "UPDATE_VENDOR", `ID: ${vendorId}`);
+    res.json({ success: true, message: "Vendor updated" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// NEW: General Update Driver
+router.post("/update-driver", checkPermission("drivers"), async (req, res) => {
+  const { driverId, phone, ...updateData } = req.body;
+  const id = driverId || phone; // Support both ID formats
+  try {
+    await db.collection(DRIVERS).doc(id).update(updateData);
+    await logAction(req.user.id, req.user.username, "UPDATE_DRIVER", `ID: ${id}`);
+    res.json({ success: true, message: "Driver updated" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─────────────────────────────────────────────────────────────
 // ACTIVE & BANNED USERS
 // ─────────────────────────────────────────────────────────────
