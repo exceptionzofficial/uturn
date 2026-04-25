@@ -312,12 +312,18 @@ router.get("/rides", checkPermission("rides"), async (req, res) => {
   const { status } = req.query;
   console.log(`[Admin] GET rides, status filter: ${status || 'all'}`);
   try {
-    let query = db.collection(TRIPS).orderBy("createdAt", "desc");
+    let query = db.collection(TRIPS);
     if (status && status !== "all") {
-      query = db.collection(TRIPS).where("status", "==", status).orderBy("createdAt", "desc");
+      query = query.where("status", "==", status);
     }
     const snapshot = await query.get();
-    const rides = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    let rides = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    // Sort in memory to avoid Firestore missing index error
+    rides.sort((a, b) => {
+      const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return dateB - dateA; // descending
+    });
     console.log(`[Admin] ✅ Fetched ${rides.length} rides`);
     res.json({ success: true, data: rides, count: rides.length });
   } catch (err) {
@@ -369,9 +375,13 @@ router.get("/user-ride-history", async (req, res) => {
   try {
     const snapshot = await db.collection(TRIPS)
       .where("customerPhone", "==", phone)
-      .orderBy("createdAt", "desc")
       .get();
     const rides = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    rides.sort((a, b) => {
+      const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return dateB - dateA;
+    });
     res.json({ success: true, data: rides, count: rides.length });
   } catch (err) {
     res.status(500).json({ error: err.message });

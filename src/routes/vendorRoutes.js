@@ -287,6 +287,7 @@ router.get("/trips", async (req, res) => {
       query = query.where("vendorId", "==", vendorId);
     }
 
+    const snapshot = await query.get();
     const trips = snapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data()

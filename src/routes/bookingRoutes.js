@@ -4,6 +4,22 @@
 const express = require("express");
 const router = express.Router();
 const { db } = require("../config/firebaseConfig");
+const multer = require("multer");
+const path = require("path");
+const fs = require("fs");
+
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    const dir = 'uploads/';
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir);
+    cb(null, dir);
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+const upload = multer({ storage: storage });
 
 const TRIPS   = process.env.FIREBASE_COLLECTION_TRIPS   || "Trips";
 const DRIVERS = process.env.FIREBASE_COLLECTION_DRIVERS || "Drivers";
@@ -130,10 +146,19 @@ router.get("/vendor/:vendorId/pending-approvals", async (req, res) => {
 // ─────────────────────────────────────────────────────────────
 // Accept Trip (Driver + optional video URL)
 // ─────────────────────────────────────────────────────────────
-router.post("/:id/accept", async (req, res) => {
+router.post("/:id/accept", upload.single('video'), async (req, res) => {
   const { id } = req.params;
-  const { driverId, videoUrl } = req.body;
-  console.log(`[Bookings] Accept called for trip: ${id}, driver: ${driverId}`);
+  const driverId = req.body.driverId;
+  let videoUrl = req.body.videoUrl || "";
+
+  if (req.file) {
+    // Generate public URL assuming backend is served correctly
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+    const host = req.headers.host;
+    videoUrl = `${protocol}://${host}/uploads/${req.file.filename}`;
+  }
+
+  console.log(`[Bookings] Accept called for trip: ${id}, driver: ${driverId}, video: ${videoUrl}`);
   try {
     const tripRef = db.collection(TRIPS).doc(id);
     const trip = await tripRef.get();
@@ -142,18 +167,24 @@ router.post("/:id/accept", async (req, res) => {
       return res.status(400).json({ error: "Trip is no longer available" });
     }
     // Check if driver is blocked (outstanding commission)
+    let driverData = {};
     if (driverId) {
       const driverDoc = await db.collection(DRIVERS).doc(driverId).get().catch(() => null);
-      if (driverDoc && driverDoc.exists && driverDoc.data().isBlocked) {
-        return res.status(403).json({
-          error: "You have a pending commission. Please settle with your vendor before accepting new rides.",
-          blocked: true,
-        });
+      if (driverDoc && driverDoc.exists) {
+        driverData = driverDoc.data();
+        if (driverData.isBlocked) {
+          return res.status(403).json({
+            error: "You have a pending commission. Please settle with your vendor before accepting new rides.",
+            blocked: true,
+          });
+        }
       }
     }
     await tripRef.update({
       status: "driverAccepted",
       driverId: driverId || "",
+      driverName: driverData.name || driverData.username || "Unknown Driver",
+      driverPhoto: driverData.profilePhoto || "",
       videoUrl: videoUrl || "",
       acceptedAt: new Date().toISOString(),
     });
@@ -192,16 +223,24 @@ router.post("/:id/approve-driver", async (req, res) => {
 // ─────────────────────────────────────────────────────────────
 router.post("/:id/reject-driver", async (req, res) => {
   const { id } = req.params;
-  const { reason } = req.body;
+  const { reason, driverId } = req.body;
   console.log(`[Bookings] reject-driver for trip: ${id}`);
   try {
-    await db.collection(TRIPS).doc(id).update({
+    const updateData = {
       status: "pending",
       rejectReason: reason || "",
       driverId: null,
+      driverName: null,
+      driverPhoto: null,
       videoUrl: null,
       rejectedAt: new Date().toISOString(),
-    });
+    };
+    if (driverId) {
+      updateData.rejectedDrivers = require("firebase-admin/firestore").FieldValue.arrayUnion(driverId);
+      updateData.lastRejectedDriver = driverId;
+    }
+    await db.collection(TRIPS).doc(id).update(updateData);
+    console.log(`[Bookings] ✅ Driver rejected for trip: ${id}`);
     res.json({ success: true, message: "Driver rejected. Trip returned to pending." });
   } catch (err) {
     res.status(500).json({ error: err.message });
