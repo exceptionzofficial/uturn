@@ -151,14 +151,20 @@ router.get("/detailed-dashboard", async (req, res) => {
     // Some simple logic mappings from the spec
     res.json({
       totalVendors: vendors.length,
-      verifiedVendors: vendors.filter(v => v.verified || v.status === "verified").length,
-      blockedVendors: vendors.filter(v => v.blocked || v.status === "blocked").length,
+      verifiedVendors: vendors.filter(v => v.verified || v.status?.toUpperCase() === "VERIFIED" || v.status?.toUpperCase() === "APPROVED").length,
+      pendingVendors: vendors.filter(v => !v.verified && (v.status?.toUpperCase() === "PENDING" || v.status?.toUpperCase() === "PENDING_REVIEW")).length,
+      blockedVendors: vendors.filter(v => v.blocked || v.status?.toUpperCase() === "BLOCKED").length,
+      
       totalDrivers: drivers.length,
       onlineDrivers: drivers.filter(d => d.isOnline).length,
-      verifiedDrivers: drivers.filter(d => d.verified || d.status === "verified").length,
-      blockedDrivers: drivers.filter(d => d.blocked || d.status === "blocked").length,
+      verifiedDrivers: drivers.filter(d => d.verified || d.status?.toUpperCase() === "VERIFIED" || d.status?.toUpperCase() === "APPROVED").length,
+      pendingDrivers: drivers.filter(d => !d.verified && (d.status?.toUpperCase() === "PENDING" || d.status?.toUpperCase() === "PENDING_REVIEW")).length,
+      blockedDrivers: drivers.filter(d => d.blocked || d.status?.toUpperCase() === "BLOCKED").length,
+      
       totalRides: trips.length,
-      completedRides: trips.filter(t => t.status === "completed").length
+      activeTrips: trips.filter(t => t.status === "inProgress" || t.status === "driverAccepted" || t.status === "vendorApproved").length,
+      pendingTrips: trips.filter(t => t.status === "pending").length,
+      completedRides: trips.filter(t => t.status === "completed" || t.status === "commissionPending").length
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

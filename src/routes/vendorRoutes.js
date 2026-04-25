@@ -287,20 +287,10 @@ router.get("/trips", async (req, res) => {
       query = query.where("vendorId", "==", vendorId);
     }
 
-    const snapshot = await query.get();
-    const trips = snapshot.docs.map((doc) => {
-      const d = doc.data();
-      return {
-        tripId: d.tripId,
-        customerName: d.customerName,
-        customerPhone: d.customerPhone,
-        pickup: d.pickup || d.pickupAddress || "",
-        drop: d.drop || d.dropAddress || "",
-        status: d.status,
-        totalTripAmount: d.totalTripAmount || d.totalFare || 0,
-        createdAt: d.createdAt,
-      };
-    });
+    const trips = snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data()
+    }));
 
     console.log(`[Vendor] ✅ Fetched ${trips.length} trips`);
     res.json(trips);
