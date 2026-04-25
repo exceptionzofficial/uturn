@@ -472,7 +472,11 @@ router.post("/:id/reject-commission", async (req, res) => {
   const { id } = req.params;
   const { reason } = req.body;
   try {
-    await db.collection(TRIPS).doc(id).update({ status: "commissionPending", commissionRejectReason: reason || "" });
+    await db.collection(TRIPS).doc(id).update({
+      status: "commissionRejected",
+      commissionRejectReason: reason || "",
+      commissionRejectedAt: new Date().toISOString()
+    });
     res.json({ success: true, message: "Commission rejected." });
   } catch (err) {
     res.status(500).json({ error: err.message });
