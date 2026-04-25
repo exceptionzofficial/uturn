@@ -300,10 +300,73 @@ router.get("/blocked-users", async (req, res) => {
 // ─────────────────────────────────────────────────────────────
 // RIDES & CUSTOMERS
 // ─────────────────────────────────────────────────────────────
+
+// GET /admin/rides?status=pending|inProgress|completed|all
 router.get("/rides", checkPermission("rides"), async (req, res) => {
+  const { status } = req.query;
+  console.log(`[Admin] GET rides, status filter: ${status || 'all'}`);
   try {
-    const snapshot = await db.collection(TRIPS).get();
-    res.json(snapshot.docs.map(doc => doc.data()));
+    let query = db.collection(TRIPS).orderBy("createdAt", "desc");
+    if (status && status !== "all") {
+      query = db.collection(TRIPS).where("status", "==", status).orderBy("createdAt", "desc");
+    }
+    const snapshot = await query.get();
+    const rides = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    console.log(`[Admin] ✅ Fetched ${rides.length} rides`);
+    res.json({ success: true, data: rides, count: rides.length });
+  } catch (err) {
+    console.error(`[Admin] ❌ GET rides error:`, err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /admin/rides/:id — full ride detail with logs
+router.get("/rides/:id", checkPermission("rides"), async (req, res) => {
+  const { id } = req.params;
+  console.log(`[Admin] GET ride detail: ${id}`);
+  try {
+    const doc = await db.collection(TRIPS).doc(id).get();
+    if (!doc.exists) return res.status(404).json({ error: "Ride not found" });
+
+    const ride = { id: doc.id, ...doc.data() };
+
+    // Attach driver info if driverId exists
+    if (ride.driverId) {
+      const driverDoc = await db.collection(DRIVERS).doc(ride.driverId).get().catch(() => null);
+      if (driverDoc && driverDoc.exists) {
+        const d = driverDoc.data();
+        ride.driverInfo = { name: d.name, phone: d.phone, vehicleType: d.vehicleType, vehicleNumber: d.vehicleNumber, rating: d.rating };
+      }
+    }
+
+    // Attach vendor info if vendorId exists
+    if (ride.vendorId) {
+      const vendorDoc = await db.collection(VENDORS).doc(ride.vendorId).get().catch(() => null);
+      if (vendorDoc && vendorDoc.exists) {
+        const v = vendorDoc.data();
+        ride.vendorInfo = { name: v.name, phone: v.phone, businessName: v.businessName };
+      }
+    }
+
+    console.log(`[Admin] ✅ Ride detail fetched: ${id}`);
+    res.json({ success: true, data: ride });
+  } catch (err) {
+    console.error(`[Admin] ❌ GET ride detail error:`, err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /admin/user-ride-history?phone=9876543210 — all rides for a customer
+router.get("/user-ride-history", async (req, res) => {
+  const { phone } = req.query;
+  if (!phone) return res.status(400).json({ error: "phone query param required" });
+  try {
+    const snapshot = await db.collection(TRIPS)
+      .where("customerPhone", "==", phone)
+      .orderBy("createdAt", "desc")
+      .get();
+    const rides = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    res.json({ success: true, data: rides, count: rides.length });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
