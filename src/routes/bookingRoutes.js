@@ -379,6 +379,7 @@ router.post("/:id/drop", async (req, res) => {
       extraChargesTotal: parseFloat(extraTotal.toFixed(2)),
       finalFare:         parseFloat(finalFare.toFixed(2)),
       driverPayout:      parseFloat(driverPayout.toFixed(2)),
+      driverEarning:     parseFloat(driverPayout.toFixed(2)),
       totalFare:         parseFloat(finalFare.toFixed(2)),
       totalTripAmount:   parseFloat(finalFare.toFixed(2)),
     };
@@ -409,23 +410,28 @@ router.post("/:id/complete", async (req, res) => {
     const now         = new Date().toISOString();
 
     if (paymentMode === "customer_pays_driver") {
-      // Driver collected cash → owes vendor commission → lock driver
-      await tripRef.update({ status: "commissionPending", completedAt: now, cashCollectedAt: now });
+      // Scenario 1: Customer Pays Driver (Cash Collection)
+      await tripRef.update({ 
+        status: "payment_verification_pending", 
+        completedAt: now, 
+        cashCollectedAt: now 
+      });
       if (trip.driverId) {
         await db.collection(DRIVERS).doc(trip.driverId).update({
-          isBlocked:               true,
-          blockedReason:           `Commission pending for trip ${id}`,
+          status: "blocked_for_payment",
+          isBlocked: true, // Legacy support
+          blockedReason: `Commission pending for trip ${id}`,
           pendingCommissionTripId: id,
           pendingCommissionAmount: trip.vendorCommission || 0,
         }).catch(e => console.warn(`[Bookings] Could not block driver: ${e.message}`));
       }
-      console.log(`[Bookings] ✅ Trip ${id} → commissionPending. Driver ${trip.driverId} blocked.`);
-      res.json({ success: true, status: "commissionPending", message: "Cash collected. Please settle commission with vendor." });
+      console.log(`[Bookings] ✅ Trip ${id} → payment_verification_pending. Driver ${trip.driverId} blocked.`);
+      res.json({ success: true, status: "payment_verification_pending", message: "Cash collected. Please settle commission with vendor." });
     } else {
-      // customer_pays_vendor — vendor already has the money, complete immediately
-      await tripRef.update({ status: "completed", completedAt: now });
-      console.log(`[Bookings] ✅ Trip ${id} → completed.`);
-      res.json({ success: true, status: "completed", message: "Trip completed successfully." });
+      // Scenario 2: Customer Pays Vendor
+      await tripRef.update({ status: "vendor_payment_pending", completedAt: now, vendorPaymentStatus: "pending" });
+      console.log(`[Bookings] ✅ Trip ${id} → vendor_payment_pending.`);
+      res.json({ success: true, status: "vendor_payment_pending", message: "Trip completed. Waiting for vendor to pay driver." });
     }
   } catch (err) {
     console.error(`[Bookings] ❌ complete error:`, err.message);
@@ -436,11 +442,27 @@ router.post("/:id/complete", async (req, res) => {
 // ─────────────────────────────────────────────────────────────
 // Commission Actions
 // ─────────────────────────────────────────────────────────────
-router.post("/:id/verify-payment", async (req, res) => {
+router.post("/:id/verify-cash", async (req, res) => {
   const { id } = req.params;
   try {
-    await db.collection(TRIPS).doc(id).update({ status: "commissionPending" });
-    res.json({ success: true, message: "Payment verified." });
+    await db.collection(TRIPS).doc(id).update({ 
+      status: "commission_pending",
+      paymentStatus: "completed"
+    });
+    res.json({ success: true, message: "Cash verified." });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/:id/pay-commission", async (req, res) => {
+  const { id } = req.params;
+  try {
+    await db.collection(TRIPS).doc(id).update({ 
+      status: "commission_verification_pending",
+      commissionStatus: "paid_by_driver"
+    });
+    res.json({ success: true, message: "Commission paid by driver." });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -450,8 +472,18 @@ router.post("/:id/approve-commission", async (req, res) => {
   const { id } = req.params;
   try {
     const doc = await db.collection(TRIPS).doc(id).get();
-    if (doc.exists && doc.data().driverId) {
+    if (doc.exists) {
+      if (doc.data().status === "vendor_payment_pending") {
+        await db.collection(TRIPS).doc(id).update({
+          status: "completed",
+          vendorPaymentStatus: "paid"
+        });
+        return res.json({ success: true, message: "Vendor paid driver. Trip complete." });
+      }
+
+      if (doc.data().driverId) {
       await db.collection(DRIVERS).doc(doc.data().driverId).update({
+        status: "active",
         isBlocked: false,
         blockedReason: "",
         pendingCommissionTripId: null,
@@ -460,6 +492,7 @@ router.post("/:id/approve-commission", async (req, res) => {
     }
     await db.collection(TRIPS).doc(id).update({
       status: "completed",
+      commissionStatus: "received",
       commissionClearedAt: new Date().toISOString(),
     });
     res.json({ success: true, message: "Commission approved. Driver unblocked." });
@@ -473,11 +506,12 @@ router.post("/:id/reject-commission", async (req, res) => {
   const { reason } = req.body;
   try {
     await db.collection(TRIPS).doc(id).update({
-      status: "commissionRejected",
+      status: "commission_pending",
+      commissionStatus: "rejected",
       commissionRejectReason: reason || "",
       commissionRejectedAt: new Date().toISOString()
     });
-    res.json({ success: true, message: "Commission rejected." });
+    res.json({ success: true, message: "Commission rejected. Loops back to driver." });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
