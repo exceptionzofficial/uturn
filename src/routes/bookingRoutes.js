@@ -382,8 +382,7 @@ router.post("/:id/drop", async (req, res) => {
       const baseFare       = parseFloat(trip.baseFare)        || 0;
       const distanceCharge = parseFloat(trip.distanceCharge)  || 0;
       const driverBata     = parseFloat(trip.driverBata)      || 0;
-      const commission     = parseFloat(trip.vendorCommission) || 0;
-
+      
       const toll    = parseFloat(tollCharges)    || 0;
       const parking = parseFloat(parkingCharges) || 0;
       const permit  = parseFloat(permitCharges)  || 0;
@@ -393,6 +392,13 @@ router.post("/:id/drop", async (req, res) => {
       let finalFare    = baseFare + distanceCharge + driverBata + waitFare + extraTotal;
       if (isNaN(finalFare)) finalFare = baseFare + distanceCharge + driverBata + extraTotal;
       if (isNaN(finalFare)) finalFare = 0;
+
+      // Calculate commission: Use percentage if available, else flat
+      let commissionPercentage = parseFloat(trip.vendorCommissionPercentage) || 0;
+      let commission = parseFloat(trip.vendorCommission) || 0;
+      if (commissionPercentage > 0) {
+        commission = (finalFare * commissionPercentage) / 100;
+      }
 
       let driverPayout = finalFare - commission;
       if (isNaN(driverPayout)) driverPayout = 0;
@@ -408,6 +414,7 @@ router.post("/:id/drop", async (req, res) => {
         otherCharges:      parseFloat(other.toFixed(2)) || 0,
         extraChargesTotal: parseFloat(extraTotal.toFixed(2)) || 0,
         finalFare:         parseFloat(finalFare.toFixed(2)) || 0,
+        vendorCommission:  parseFloat(commission.toFixed(2)) || 0,
         driverPayout:      parseFloat(driverPayout.toFixed(2)) || 0,
         totalFare:         parseFloat(finalFare.toFixed(2)) || 0,
         totalTripAmount:   parseFloat(finalFare.toFixed(2)) || 0,
