@@ -370,10 +370,13 @@ router.post("/:id/drop", async (req, res) => {
       let waitMinutes = 0;
       if (trip.tripStartedAt) {
         const startTime = new Date(trip.tripStartedAt);
-        waitMinutes = Math.max(0, Math.ceil((now - startTime) / 60000));
+        if (!isNaN(startTime.getTime())) {
+          waitMinutes = Math.max(0, Math.ceil((now - startTime) / 60000));
+        }
       }
       const waitingChargesPerMin = parseFloat(trip.waitingChargesPerMin) || 0;
-      const waitFare = waitMinutes * waitingChargesPerMin;
+      let waitFare = waitMinutes * waitingChargesPerMin;
+      if (isNaN(waitFare)) waitFare = 0;
 
       // ── Final fare breakdown ─────────────────────────────────
       const baseFare       = parseFloat(trip.baseFare)        || 0;
@@ -387,36 +390,40 @@ router.post("/:id/drop", async (req, res) => {
       const other   = parseFloat(otherCharges)   || 0;
       const extraTotal = toll + parking + permit + other;
 
-      const finalFare    = baseFare + distanceCharge + driverBata + waitFare + extraTotal;
-      const driverPayout = finalFare - commission;
+      let finalFare    = baseFare + distanceCharge + driverBata + waitFare + extraTotal;
+      if (isNaN(finalFare)) finalFare = baseFare + distanceCharge + driverBata + extraTotal;
+      if (isNaN(finalFare)) finalFare = 0;
+
+      let driverPayout = finalFare - commission;
+      if (isNaN(driverPayout)) driverPayout = 0;
 
       const updatedFields = {
         status:            "dropped",
         droppedAt:         now.toISOString(),
-        waitMinutes,
-        waitFare:          parseFloat(waitFare.toFixed(2)),
-        tollCharges:       parseFloat(toll.toFixed(2)),
-        parkingCharges:    parseFloat(parking.toFixed(2)),
-        permitCharges:     parseFloat(permit.toFixed(2)),
-        otherCharges:      parseFloat(other.toFixed(2)),
-        extraChargesTotal: parseFloat(extraTotal.toFixed(2)),
-        finalFare:         parseFloat(finalFare.toFixed(2)),
-        driverPayout:      parseFloat(driverPayout.toFixed(2)),
-        totalFare:         parseFloat(finalFare.toFixed(2)),
-        totalTripAmount:   parseFloat(finalFare.toFixed(2)),
-        startKm:           startKm,
-        endKm:             endKm,
-        distanceKm:        distanceKm || (parseFloat(endKm) - parseFloat(startKm)) || 0,
+        waitMinutes:       waitMinutes || 0,
+        waitFare:          parseFloat(waitFare.toFixed(2)) || 0,
+        tollCharges:       parseFloat(toll.toFixed(2)) || 0,
+        parkingCharges:    parseFloat(parking.toFixed(2)) || 0,
+        permitCharges:     parseFloat(permit.toFixed(2)) || 0,
+        otherCharges:      parseFloat(other.toFixed(2)) || 0,
+        extraChargesTotal: parseFloat(extraTotal.toFixed(2)) || 0,
+        finalFare:         parseFloat(finalFare.toFixed(2)) || 0,
+        driverPayout:      parseFloat(driverPayout.toFixed(2)) || 0,
+        totalFare:         parseFloat(finalFare.toFixed(2)) || 0,
+        totalTripAmount:   parseFloat(finalFare.toFixed(2)) || 0,
+        startKm:           startKm || 0,
+        endKm:             endKm || 0,
+        distanceKm:        parseFloat(distanceKm) || (parseFloat(endKm) - parseFloat(startKm)) || 0,
       };
 
-    await tripRef.update(updatedFields);
-    const updatedTrip = { id, ...trip, ...updatedFields };
-    console.log(`[Bookings] ✅ Trip dropped. Final Fare: ₹${finalFare.toFixed(2)} for trip: ${id}`);
-    res.json({ success: true, message: "Customer dropped. Final fare calculated.", data: updatedTrip });
-  } catch (err) {
-    console.error(`[Bookings] ❌ drop error:`, err.message);
-    res.status(500).json({ error: err.message });
-  }
+      await tripRef.update(updatedFields);
+      const updatedTrip = { id, ...trip, ...updatedFields };
+      console.log(`[Bookings] ✅ Trip dropped. Final Fare: ₹${finalFare.toFixed(2)} for trip: ${id}`);
+      res.json({ success: true, message: "Customer dropped. Final fare calculated.", data: updatedTrip });
+    } catch (err) {
+      console.error(`[Bookings] ❌ drop error:`, err.message);
+      res.status(500).json({ error: err.message });
+    }
 });
 
 // ─────────────────────────────────────────────────────────────
