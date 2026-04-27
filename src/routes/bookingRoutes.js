@@ -55,7 +55,10 @@ router.post("/create", async (req, res) => {
       pickupCoords: tripData.pickupCoords || tripData.pickupLocation || { latitude: 0, longitude: 0 },
       dropCoords: tripData.dropCoords || tripData.dropLocation || { latitude: 0, longitude: 0 },
       tripType: tripData.tripType || "oneWay",
-      vehicleType: tripData.vehicleType || "Sedan",
+      vehicleType: tripData.vehicle || tripData.vehicleType || "Sedan", // Support both 'vehicle' and 'vehicleType'
+      category: tripData.category || "Passenger",
+      numberOfPeople: tripData.numberOfPeople || 1,
+      loadCapacity: tripData.loadCapacity || "",
       scheduleDate: tripData.scheduleDate || "",
       scheduleTime: tripData.scheduleTime || "",
       returnDate: tripData.returnDate || "",
@@ -71,11 +74,13 @@ router.post("/create", async (req, res) => {
       vendorCommissionPercentage: tripData.vendorCommissionPercentage || 0,
       packageAmount: tripData.totalFare || tripData.totalTripAmount || 0,
       estimatedFare: tripData.totalFare || tripData.totalTripAmount || 0,
+      estimatedDistance: tripData.estimatedDistance || tripData.distance || "0 km",
+      estimatedTime: tripData.estimatedTime || "",
       totalAmount: tripData.totalFare || tripData.totalTripAmount || 0,
       totalTripAmount: tripData.totalTripAmount || tripData.totalFare || 0,
       totalFare: tripData.totalFare || tripData.totalTripAmount || 0,
       paymentMode: tripData.paymentMode || "customer_pays_driver",
-      additionalStops: tripData.additionalStops || [],
+      additionalStops: tripData.additionalStops || tripData.stops || [],
       status: tripData.status || "pending",
       createdAt: new Date().toISOString(),
     };
@@ -166,6 +171,21 @@ router.post("/:id/accept", upload.single('video'), async (req, res) => {
     if (trip.data().status !== "pending") {
       return res.status(400).json({ error: "Trip is no longer available" });
     }
+
+    // Check if driver already has an active trip
+    if (driverId) {
+      const activeTripsSnapshot = await db.collection(TRIPS)
+        .where("driverId", "==", driverId)
+        .where("status", "in", ["driverAccepted", "vendorApproved", "arrived", "inProgress"])
+        .get();
+      
+      if (!activeTripsSnapshot.empty) {
+        return res.status(403).json({ 
+          error: "You already have an active trip. Please complete or cancel it before accepting another." 
+        });
+      }
+    }
+
     // Check if driver is blocked (outstanding commission)
     let driverData = {};
     if (driverId) {
@@ -494,6 +514,110 @@ router.get("/:id", async (req, res) => {
     res.json({ success: true, data: { id: doc.id, ...doc.data() } });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// Public Tracking Page (HTML)
+// ─────────────────────────────────────────────────────────────
+router.get("/track/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const doc = await db.collection(TRIPS).doc(id).get();
+    if (!doc.exists) return res.status(404).send("<h1>Trip Not Found</h1>");
+    const trip = doc.data();
+
+    // The HTML content
+    const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UTurn - Track Your Ride</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background: #F5F7FA; margin: 0; padding: 20px; color: #1A202C; }
+        .card { background: white; border-radius: 20px; padding: 24px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); max-width: 500px; margin: 0 auto; }
+        .header { text-align: center; margin-bottom: 24px; }
+        .header h1 { margin: 0; color: #1E40AF; font-size: 24px; font-weight: 800; }
+        .status-badge { display: inline-block; padding: 6px 12px; border-radius: 20px; background: #DBEAFE; color: #1E40AF; font-weight: 600; font-size: 14px; margin-top: 8px; }
+        .info-row { display: flex; align-items: center; margin-bottom: 16px; }
+        .info-icon { font-size: 20px; margin-right: 12px; width: 24px; text-align: center; }
+        .info-label { color: #718096; font-size: 14px; margin-bottom: 2px; }
+        .info-value { font-weight: 600; font-size: 16px; }
+        .otp-container { background: #F0FDF4; border: 2px dashed #4ADE80; border-radius: 16px; padding: 20px; text-align: center; margin-top: 24px; }
+        .otp-title { color: #166534; font-weight: 600; margin-bottom: 8px; font-size: 14px; }
+        .otp-code { font-size: 48px; font-weight: 800; color: #166534; letter-spacing: 8px; margin: 0; }
+        .driver-info { border-top: 1px solid #E2E8F0; padding-top: 20px; margin-top: 20px; }
+        .footer { text-align: center; margin-top: 24px; color: #718096; font-size: 12px; }
+        .refresh-btn { background: #1E40AF; color: white; border: none; padding: 12px 24px; border-radius: 12px; font-weight: 600; cursor: pointer; width: 100%; margin-top: 16px; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="header">
+            <h1>UTURN</h1>
+            <div class="status-badge">${(trip.status || 'Active').toUpperCase()}</div>
+        </div>
+
+        <div class="info-row">
+            <div class="info-icon">📍</div>
+            <div>
+                <div class="info-label">Pickup Location</div>
+                <div class="info-value">${trip.pickupAddress || trip.pickup}</div>
+            </div>
+        </div>
+
+        <div class="info-row">
+            <div class="info-icon">🏁</div>
+            <div>
+                <div class="info-label">Drop Destination</div>
+                <div class="info-value">${trip.dropAddress || trip.drop}</div>
+            </div>
+        </div>
+
+        <div class="driver-info">
+            <div class="info-row">
+                <div class="info-icon">👤</div>
+                <div>
+                    <div class="info-label">Driver Details</div>
+                    <div class="info-value">${trip.driverName || 'Assigning...'}</div>
+                    ${trip.driverPhone ? `<a href="tel:${trip.driverPhone}" style="color: #1E40AF; font-size: 14px;">📞 Call Driver</a>` : ''}
+                </div>
+            </div>
+        </div>
+
+        ${trip.rideOtp ? `
+        <div class="otp-container">
+            <div class="otp-title">YOUR START OTP</div>
+            <p class="otp-code">${trip.rideOtp}</p>
+            <p style="font-size: 12px; color: #166534; margin-top: 8px;">Share this with the driver to start the ride</p>
+        </div>
+        ` : `
+        <div class="otp-container" style="background: #FFFBEB; border-color: #FBBF24;">
+            <div class="otp-title" style="color: #92400E;">OTP PENDING</div>
+            <p style="color: #92400E; font-size: 14px;">The driver hasn't requested the OTP yet.</p>
+        </div>
+        `}
+
+        <button class="refresh-btn" onclick="window.location.reload()">Refresh Status</button>
+    </div>
+    <div class="footer">
+        Ride ID: #${id.slice(-8)}<br>
+        © 2024 UTurn Technologies
+    </div>
+
+    <script>
+        // Auto refresh every 10 seconds
+        setInterval(() => window.location.reload(), 10000);
+    </script>
+</body>
+</html>
+    `;
+    res.send(html);
+  } catch (err) {
+    res.status(500).send("<h1>Internal Server Error</h1>");
   }
 });
 
