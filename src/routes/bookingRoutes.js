@@ -348,60 +348,66 @@ router.post("/:id/start", async (req, res) => {
 // ─────────────────────────────────────────────────────────────
 router.post("/:id/drop", async (req, res) => {
   const { id } = req.params;
-  const {
-    tollCharges    = 0,
-    parkingCharges = 0,
-    permitCharges  = 0,
-    otherCharges   = 0,
-  } = req.body;
-  console.log(`[Bookings] drop called for trip: ${id}`);
-  try {
-    const tripRef = db.collection(TRIPS).doc(id);
-    const tripDoc = await tripRef.get();
-    if (!tripDoc.exists) return res.status(404).json({ error: "Trip not found" });
+    const { 
+      tollCharges    = 0, 
+      parkingCharges = 0, 
+      permitCharges  = 0, 
+      otherCharges   = 0,
+      startKm,
+      endKm,
+      distanceKm
+    } = req.body;
+    console.log(`[Bookings] drop called for trip: ${id} with distance: ${distanceKm}`);
+    try {
+      const tripRef = db.collection(TRIPS).doc(id);
+      const tripDoc = await tripRef.get();
+      if (!tripDoc.exists) return res.status(404).json({ error: "Trip not found" });
 
-    const trip = tripDoc.data();
-    const now   = new Date();
+      const trip = tripDoc.data();
+      const now   = new Date();
 
-    // ── Wait time calculation ────────────────────────────────
-    let waitMinutes = 0;
-    if (trip.tripStartedAt) {
-      const startTime = new Date(trip.tripStartedAt);
-      waitMinutes = Math.max(0, Math.ceil((now - startTime) / 60000));
-    }
-    const waitingChargesPerMin = parseFloat(trip.waitingChargesPerMin) || 0;
-    const waitFare = waitMinutes * waitingChargesPerMin;
+      // ── Wait time calculation ────────────────────────────────
+      let waitMinutes = 0;
+      if (trip.tripStartedAt) {
+        const startTime = new Date(trip.tripStartedAt);
+        waitMinutes = Math.max(0, Math.ceil((now - startTime) / 60000));
+      }
+      const waitingChargesPerMin = parseFloat(trip.waitingChargesPerMin) || 0;
+      const waitFare = waitMinutes * waitingChargesPerMin;
 
-    // ── Final fare breakdown ─────────────────────────────────
-    const baseFare       = parseFloat(trip.baseFare)        || 0;
-    const distanceCharge = parseFloat(trip.distanceCharge)  || 0;
-    const driverBata     = parseFloat(trip.driverBata)      || 0;
-    const commission     = parseFloat(trip.vendorCommission) || 0;
+      // ── Final fare breakdown ─────────────────────────────────
+      const baseFare       = parseFloat(trip.baseFare)        || 0;
+      const distanceCharge = parseFloat(trip.distanceCharge)  || 0;
+      const driverBata     = parseFloat(trip.driverBata)      || 0;
+      const commission     = parseFloat(trip.vendorCommission) || 0;
 
-    const toll    = parseFloat(tollCharges)    || 0;
-    const parking = parseFloat(parkingCharges) || 0;
-    const permit  = parseFloat(permitCharges)  || 0;
-    const other   = parseFloat(otherCharges)   || 0;
-    const extraTotal = toll + parking + permit + other;
+      const toll    = parseFloat(tollCharges)    || 0;
+      const parking = parseFloat(parkingCharges) || 0;
+      const permit  = parseFloat(permitCharges)  || 0;
+      const other   = parseFloat(otherCharges)   || 0;
+      const extraTotal = toll + parking + permit + other;
 
-    const finalFare    = baseFare + distanceCharge + driverBata + waitFare + extraTotal;
-    const driverPayout = finalFare - commission;
+      const finalFare    = baseFare + distanceCharge + driverBata + waitFare + extraTotal;
+      const driverPayout = finalFare - commission;
 
-    const updatedFields = {
-      status:            "dropped",
-      droppedAt:         now.toISOString(),
-      waitMinutes,
-      waitFare:          parseFloat(waitFare.toFixed(2)),
-      tollCharges:       parseFloat(toll.toFixed(2)),
-      parkingCharges:    parseFloat(parking.toFixed(2)),
-      permitCharges:     parseFloat(permit.toFixed(2)),
-      otherCharges:      parseFloat(other.toFixed(2)),
-      extraChargesTotal: parseFloat(extraTotal.toFixed(2)),
-      finalFare:         parseFloat(finalFare.toFixed(2)),
-      driverPayout:      parseFloat(driverPayout.toFixed(2)),
-      totalFare:         parseFloat(finalFare.toFixed(2)),
-      totalTripAmount:   parseFloat(finalFare.toFixed(2)),
-    };
+      const updatedFields = {
+        status:            "dropped",
+        droppedAt:         now.toISOString(),
+        waitMinutes,
+        waitFare:          parseFloat(waitFare.toFixed(2)),
+        tollCharges:       parseFloat(toll.toFixed(2)),
+        parkingCharges:    parseFloat(parking.toFixed(2)),
+        permitCharges:     parseFloat(permit.toFixed(2)),
+        otherCharges:      parseFloat(other.toFixed(2)),
+        extraChargesTotal: parseFloat(extraTotal.toFixed(2)),
+        finalFare:         parseFloat(finalFare.toFixed(2)),
+        driverPayout:      parseFloat(driverPayout.toFixed(2)),
+        totalFare:         parseFloat(finalFare.toFixed(2)),
+        totalTripAmount:   parseFloat(finalFare.toFixed(2)),
+        startKm:           startKm,
+        endKm:             endKm,
+        distanceKm:        distanceKm || (parseFloat(endKm) - parseFloat(startKm)) || 0,
+      };
 
     await tripRef.update(updatedFields);
     const updatedTrip = { id, ...trip, ...updatedFields };
