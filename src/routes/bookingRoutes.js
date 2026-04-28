@@ -658,7 +658,7 @@ router.get("/track/:id", async (req, res) => {
     </div>
     <div class="footer">
         Ride ID: #${id.slice(-8)}<br>
-        © 2024 UTurn Technologies
+        © 2026 UTurn Technologies
     </div>
 
     <script>
