@@ -354,12 +354,15 @@ router.post("/:id/start", async (req, res) => {
       console.log(`[Bookings] ✅ Self-ride OTP verified for ${id}`);
     }
 
+    const startKmVal = parseFloat(req.body.startKm) || 0;
+
     await tripRef.update({
       status: "inProgress",
       tripStartedAt: new Date().toISOString(),
       otpUsed: otpStr,
+      startKm: startKmVal,
     });
-    console.log(`[Bookings] ✅ Trip started: ${id}`);
+    console.log(`[Bookings] ✅ Trip started: ${id}, startKm: ${startKmVal}`);
     res.json({ success: true, message: "Trip started successfully." });
   } catch (err) {
     console.error(`[Bookings] ❌ start error:`, err.message);
