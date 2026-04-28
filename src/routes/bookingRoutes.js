@@ -320,23 +320,38 @@ router.post("/:id/otp-generate", async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────
-// Start Trip — OTP Verification (BYPASS: any 4-digit numeric)
+// Start Trip — OTP Verification
+// Self rides: verify against real generated OTP
+// Vendor rides: bypass mode (any 4-digit numeric)
 // ─────────────────────────────────────────────────────────────
 router.post("/:id/start", async (req, res) => {
   const { id } = req.params;
   const { otp } = req.body;
-  console.log(`[Bookings] start (OTP BYPASS) for trip: ${id}, otp received: ${otp}`);
+  console.log(`[Bookings] start for trip: ${id}, otp received: ${otp}`);
   try {
     const tripRef = db.collection(TRIPS).doc(id);
-    const trip = await tripRef.get();
-    if (!trip.exists) return res.status(404).json({ error: "Trip not found" });
+    const tripDoc = await tripRef.get();
+    if (!tripDoc.exists) return res.status(404).json({ error: "Trip not found" });
 
-    // BYPASS MODE: Accept any 4-digit numeric OTP
-    // Same pattern as /vendor/verify-otp — swap to strict check in production
+    const tripData = tripDoc.data();
     const otpStr = String(otp || "").trim();
+
     if (!otpStr || !/^\d{4}$/.test(otpStr)) {
       console.warn(`[Bookings] ❌ Invalid OTP format for ${id}: "${otp}"`);
       return res.json({ success: false, message: "Please enter a valid 4-digit OTP." });
+    }
+
+    // Self rides: verify against the real generated OTP
+    if (tripData.isSelfRide) {
+      const storedOtp = String(tripData.rideOtp || "").trim();
+      if (!storedOtp) {
+        return res.json({ success: false, message: "OTP not yet generated. Please wait for customer to open tracking link." });
+      }
+      if (otpStr !== storedOtp) {
+        console.warn(`[Bookings] ❌ Wrong OTP for self-ride ${id}: entered ${otpStr}, expected ${storedOtp}`);
+        return res.json({ success: false, message: "Incorrect OTP. Please ask the customer for the correct OTP from their tracking link." });
+      }
+      console.log(`[Bookings] ✅ Self-ride OTP verified for ${id}`);
     }
 
     await tripRef.update({
@@ -344,7 +359,7 @@ router.post("/:id/start", async (req, res) => {
       tripStartedAt: new Date().toISOString(),
       otpUsed: otpStr,
     });
-    console.log(`[Bookings] ✅ Trip started (OTP bypass): ${id}`);
+    console.log(`[Bookings] ✅ Trip started: ${id}`);
     res.json({ success: true, message: "Trip started successfully." });
   } catch (err) {
     console.error(`[Bookings] ❌ start error:`, err.message);
