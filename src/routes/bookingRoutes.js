@@ -43,6 +43,10 @@ router.post("/create", async (req, res) => {
     const tripDoc = {
       tripId,
       vendorId: tripData.vendorId || "SYSTEM_VENDOR",
+      isSelfRide: tripData.isSelfRide || false,
+      driverId: tripData.driverId || "",
+      driverName: tripData.driverName || "",
+      driverPhone: tripData.driverPhone || tripData.driverId || "",
       customerName: tripData.customerName || "",
       customerPhone: tripData.customerPhone || "",
       customerLanguage: tripData.customerLanguage || "Tamil",
@@ -55,7 +59,7 @@ router.post("/create", async (req, res) => {
       pickupCoords: tripData.pickupCoords || tripData.pickupLocation || { latitude: 0, longitude: 0 },
       dropCoords: tripData.dropCoords || tripData.dropLocation || { latitude: 0, longitude: 0 },
       tripType: tripData.tripType || "oneWay",
-      vehicleType: tripData.vehicle || tripData.vehicleType || "Sedan", // Support both 'vehicle' and 'vehicleType'
+      vehicleType: tripData.vehicle || tripData.vehicleType || "Sedan",
       category: tripData.category || "Passenger",
       numberOfPeople: tripData.numberOfPeople || 1,
       loadCapacity: tripData.loadCapacity || "",
@@ -70,6 +74,8 @@ router.post("/create", async (req, res) => {
       waitingChargesPerMin: tripData.waitingChargesPerMin || 0,
       waitingChargesPerHour: (tripData.waitingChargesPerMin || 0) * 60,
       driverBata: tripData.driverBata || 0,
+      nightAllowance: tripData.nightAllowance || 0,
+      hillsAllowance: tripData.hillsAllowance || 0,
       vendorCommission: tripData.vendorCommission || 0,
       vendorCommissionPercentage: tripData.vendorCommissionPercentage || 0,
       packageAmount: tripData.totalFare || tripData.totalTripAmount || 0,
@@ -81,6 +87,9 @@ router.post("/create", async (req, res) => {
       totalFare: tripData.totalFare || tripData.totalTripAmount || 0,
       paymentMode: tripData.paymentMode || "customer_pays_driver",
       additionalStops: tripData.additionalStops || tripData.stops || [],
+      // For self rides, also reveal customer info immediately
+      revealedCustomerName: tripData.isSelfRide ? (tripData.customerName || "") : "",
+      revealedCustomerPhone: tripData.isSelfRide ? (tripData.customerPhone || "") : "",
       status: tripData.status || "pending",
       createdAt: new Date().toISOString(),
     };
@@ -446,9 +455,15 @@ router.post("/:id/complete", async (req, res) => {
 
     const trip        = tripDoc.data();
     const paymentMode = trip.paymentMode || "customer_pays_driver";
+    const isSelfRide  = trip.isSelfRide || false;
     const now         = new Date().toISOString();
 
-    if (paymentMode === "customer_pays_driver") {
+    // Self rides: driver collects cash directly, no commission, complete immediately
+    if (isSelfRide || paymentMode === "pay_driver") {
+      await tripRef.update({ status: "completed", completedAt: now, cashCollectedAt: now });
+      console.log(`[Bookings] ✅ Self-ride ${id} → completed. No commission.`);
+      res.json({ success: true, status: "completed", message: "Self ride completed. Cash collected directly." });
+    } else if (paymentMode === "customer_pays_driver") {
       // Driver collected cash → owes vendor commission → lock driver
       await tripRef.update({ status: "commissionPending", completedAt: now, cashCollectedAt: now });
       if (trip.driverId) {
