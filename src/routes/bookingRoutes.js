@@ -380,6 +380,7 @@ router.post("/:id/drop", async (req, res) => {
       parkingCharges = 0, 
       permitCharges  = 0, 
       otherCharges   = 0,
+      waitCharges    = 0,
       startKm,
       endKm,
       distanceKm
@@ -394,15 +395,18 @@ router.post("/:id/drop", async (req, res) => {
       const now   = new Date();
 
       // ── Wait time calculation ────────────────────────────────
+      // If waitCharges is provided by app, use it. Otherwise calculate from time.
+      let waitFare = parseFloat(waitCharges) || 0;
       let waitMinutes = 0;
-      if (trip.tripStartedAt) {
+
+      if (waitFare <= 0 && trip.tripStartedAt) {
         const startTime = new Date(trip.tripStartedAt);
         if (!isNaN(startTime.getTime())) {
           waitMinutes = Math.max(0, Math.ceil((now - startTime) / 60000));
         }
+        const waitingChargesPerMin = parseFloat(trip.waitingChargesPerMin) || 0;
+        waitFare = waitMinutes * waitingChargesPerMin;
       }
-      const waitingChargesPerMin = parseFloat(trip.waitingChargesPerMin) || 0;
-      let waitFare = waitMinutes * waitingChargesPerMin;
       if (isNaN(waitFare)) waitFare = 0;
 
       // ── Final fare breakdown ─────────────────────────────────
