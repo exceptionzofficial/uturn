@@ -320,14 +320,15 @@ router.post("/:id/otp-generate", async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────
-// Start Trip — OTP Verification
+// Start Trip — OTP Verification + Odometer Photo
 // Self rides: verify against real generated OTP
 // Vendor rides: bypass mode (any 4-digit numeric)
 // ─────────────────────────────────────────────────────────────
-router.post("/:id/start", async (req, res) => {
+router.post("/:id/start", upload.single('odometerPhoto'), async (req, res) => {
   const { id } = req.params;
   const { otp } = req.body;
-  console.log(`[Bookings] start for trip: ${id}, otp received: ${otp}`);
+  const odometerPhoto = req.file ? `/uploads/${req.file.filename}` : "";
+  console.log(`[Bookings] start for trip: ${id}, otp received: ${otp}, photo: ${odometerPhoto}`);
   try {
     const tripRef = db.collection(TRIPS).doc(id);
     const tripDoc = await tripRef.get();
@@ -361,8 +362,9 @@ router.post("/:id/start", async (req, res) => {
       tripStartedAt: new Date().toISOString(),
       otpUsed: otpStr,
       startKm: startKmVal,
+      startOdometerPhoto: odometerPhoto,
     });
-    console.log(`[Bookings] ✅ Trip started: ${id}, startKm: ${startKmVal}`);
+    console.log(`[Bookings] ✅ Trip started: ${id}, startKm: ${startKmVal}, photo: ${odometerPhoto}`);
     res.json({ success: true, message: "Trip started successfully." });
   } catch (err) {
     console.error(`[Bookings] ❌ start error:`, err.message);
@@ -373,7 +375,7 @@ router.post("/:id/start", async (req, res) => {
 // ─────────────────────────────────────────────────────────────
 // Drop Customer — Extra Charges + Server-Side Final Fare Calc
 // ─────────────────────────────────────────────────────────────
-router.post("/:id/drop", async (req, res) => {
+router.post("/:id/drop", upload.single('odometerPhoto'), async (req, res) => {
   const { id } = req.params;
     const { 
       tollCharges    = 0, 
@@ -385,7 +387,8 @@ router.post("/:id/drop", async (req, res) => {
       endKm,
       distanceKm
     } = req.body;
-    console.log(`[Bookings] drop called for trip: ${id} with distance: ${distanceKm}`);
+    const odometerPhoto = req.file ? `/uploads/${req.file.filename}` : "";
+    console.log(`[Bookings] drop called for trip: ${id} with distance: ${distanceKm}, photo: ${odometerPhoto}`);
     try {
       const tripRef = db.collection(TRIPS).doc(id);
       const tripDoc = await tripRef.get();
@@ -451,6 +454,7 @@ router.post("/:id/drop", async (req, res) => {
         totalTripAmount:   parseFloat(finalFare.toFixed(2)) || 0,
         startKm:           startKm || 0,
         endKm:             endKm || 0,
+        endOdometerPhoto:  odometerPhoto,
         distanceKm:        parseFloat(distanceKm) || (parseFloat(endKm) - parseFloat(startKm)) || 0,
       };
 
