@@ -641,4 +641,37 @@ router.get("/track/:id", async (req, res) => {
   }
 });
 
+// ─────────────────────────────────────────────────────────────
+// Trigger SOS for a Trip
+// ─────────────────────────────────────────────────────────────
+router.post("/:id/sos", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { driverId, location } = req.body;
+    
+    // Save SOS alert to a dedicated collection
+    const sosId = `SOS-${Date.now()}`;
+    await db.collection("SOS_Alerts").doc(sosId).set({
+      sosId,
+      tripId: id,
+      driverId: driverId || "UNKNOWN",
+      location: location || "UNKNOWN",
+      timestamp: new Date().toISOString(),
+      status: "unresolved",
+    });
+
+    // Optionally update trip status or add a flag
+    await db.collection(TRIPS).doc(id).update({
+      sosTriggered: true,
+      sosTriggeredAt: new Date().toISOString(),
+    });
+
+    console.log(`[Bookings] 🚨 SOS Triggered for Trip ${id} by Driver ${driverId}`);
+    res.json({ success: true, message: "SOS Alert sent to Admin successfully" });
+  } catch (err) {
+    console.error(`[Bookings] ❌ SOS error:`, err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
