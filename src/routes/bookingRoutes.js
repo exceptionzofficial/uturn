@@ -320,15 +320,13 @@ router.post("/:id/otp-generate", async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────
-// Start Trip — OTP Verification + Odometer Photo
-// Self rides: verify against real generated OTP
-// Vendor rides: bypass mode (any 4-digit numeric)
+// Verify OTP Only (JSON body — no multipart)
+// Used by driver app to verify OTP before odometer step
 // ─────────────────────────────────────────────────────────────
-router.post("/:id/start", upload.single('odometerPhoto'), async (req, res) => {
+router.post("/:id/verify-otp", async (req, res) => {
   const { id } = req.params;
   const { otp } = req.body;
-  const odometerPhoto = req.file ? `/uploads/${req.file.filename}` : "";
-  console.log(`[Bookings] start for trip: ${id}, otp received: ${otp}, photo: ${odometerPhoto}`);
+  console.log(`[Bookings] verify-otp for trip: ${id}, otp received: "${otp}"`);
   try {
     const tripRef = db.collection(TRIPS).doc(id);
     const tripDoc = await tripRef.get();
@@ -345,14 +343,65 @@ router.post("/:id/start", upload.single('odometerPhoto'), async (req, res) => {
     // Self rides: verify against the real generated OTP
     if (tripData.isSelfRide) {
       const storedOtp = String(tripData.rideOtp || "").trim();
+      console.log(`[Bookings] Self-ride OTP check — entered: "${otpStr}", stored: "${storedOtp}"`);
       if (!storedOtp) {
         return res.json({ success: false, message: "OTP not yet generated. Please wait for customer to open tracking link." });
       }
       if (otpStr !== storedOtp) {
-        console.warn(`[Bookings] ❌ Wrong OTP for self-ride ${id}: entered ${otpStr}, expected ${storedOtp}`);
+        console.warn(`[Bookings] ❌ Wrong OTP for self-ride ${id}: entered "${otpStr}", expected "${storedOtp}"`);
         return res.json({ success: false, message: "Incorrect OTP. Please ask the customer for the correct OTP from their tracking link." });
       }
       console.log(`[Bookings] ✅ Self-ride OTP verified for ${id}`);
+    }
+
+    // Mark OTP as verified so /start can skip re-check
+    await tripRef.update({ otpVerified: true, otpUsed: otpStr });
+    console.log(`[Bookings] ✅ OTP verified for trip ${id}`);
+    res.json({ success: true, message: "OTP verified successfully." });
+  } catch (err) {
+    console.error(`[Bookings] ❌ verify-otp error:`, err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// Start Trip — Odometer Photo + Trip Start
+// OTP already verified via /verify-otp, or inline for legacy
+// ─────────────────────────────────────────────────────────────
+router.post("/:id/start", upload.single('odometerPhoto'), async (req, res) => {
+  const { id } = req.params;
+  const { otp } = req.body;
+  const odometerPhoto = req.file ? `/uploads/${req.file.filename}` : "";
+  console.log(`[Bookings] start for trip: ${id}, otp received: "${otp}", photo: ${odometerPhoto}`);
+  try {
+    const tripRef = db.collection(TRIPS).doc(id);
+    const tripDoc = await tripRef.get();
+    if (!tripDoc.exists) return res.status(404).json({ error: "Trip not found" });
+
+    const tripData = tripDoc.data();
+    const otpStr = String(otp || "").trim();
+
+    // If OTP was already verified via /verify-otp, skip re-check
+    if (!tripData.otpVerified) {
+      if (!otpStr || !/^\d{4}$/.test(otpStr)) {
+        console.warn(`[Bookings] ❌ Invalid OTP format for ${id}: "${otp}"`);
+        return res.json({ success: false, message: "Please enter a valid 4-digit OTP." });
+      }
+
+      // Self rides: verify against the real generated OTP
+      if (tripData.isSelfRide) {
+        const storedOtp = String(tripData.rideOtp || "").trim();
+        if (!storedOtp) {
+          return res.json({ success: false, message: "OTP not yet generated. Please wait for customer to open tracking link." });
+        }
+        if (otpStr !== storedOtp) {
+          console.warn(`[Bookings] ❌ Wrong OTP for self-ride ${id}: entered ${otpStr}, expected ${storedOtp}`);
+          return res.json({ success: false, message: "Incorrect OTP. Please ask the customer for the correct OTP from their tracking link." });
+        }
+        console.log(`[Bookings] ✅ Self-ride OTP verified for ${id}`);
+      }
+    } else {
+      console.log(`[Bookings] OTP already verified for ${id}, skipping re-check`);
     }
 
     const startKmVal = parseFloat(req.body.startKm) || 0;
@@ -360,7 +409,7 @@ router.post("/:id/start", upload.single('odometerPhoto'), async (req, res) => {
     await tripRef.update({
       status: "inProgress",
       tripStartedAt: new Date().toISOString(),
-      otpUsed: otpStr,
+      otpUsed: otpStr || tripData.otpUsed || "",
       startKm: startKmVal,
       startOdometerPhoto: odometerPhoto,
     });
